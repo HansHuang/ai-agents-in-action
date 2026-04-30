@@ -1,0 +1,24 @@
+{
+  "name": "02-structured-output",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Structured output: Zod schemas, function calling, parse-validate-retry",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "start:zod": "npx tsx zod_extraction.ts",
+    "test": "node --test prompt_template.test.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.15",
+    "openai": "^4.91.0",
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}

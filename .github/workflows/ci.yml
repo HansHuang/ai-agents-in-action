@@ -1,0 +1,103 @@
+# .github/workflows/ci.yml
+name: Verify All Implementations
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        concept:
+          - 01-basic-llm-call
+          - 02-structured-output
+          - 03-agent-loop
+          - 04-rag-pipeline
+          - 05-context-assembly
+          - 06-multi-agent
+          - 07-langgraph-exploration
+          - 08-harness
+          - 09-skills
+          - 10-mcp-server
+          - 11-eval-suite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies for ${{ matrix.concept }}
+        working-directory: code/python/${{ matrix.concept }}
+        run: |
+          if [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Syntax check ${{ matrix.concept }}
+        working-directory: code/python/${{ matrix.concept }}
+        run: python -m py_compile main.py
+
+  nodejs:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        concept:
+          - 01-basic-llm-call
+          - 02-structured-output
+          - 03-agent-loop
+          - 04-rag-pipeline
+          - 05-context-assembly
+          - 06-multi-agent
+          - 07-langgraph-exploration
+          - 08-harness
+          - 09-skills
+          - 10-mcp-server
+          - 11-eval-suite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies for ${{ matrix.concept }}
+        working-directory: code/nodejs/${{ matrix.concept }}
+        run: |
+          if [ -s package.json ]; then
+            npm install
+          fi
+      - name: Syntax check ${{ matrix.concept }}
+        working-directory: code/nodejs/${{ matrix.concept }}
+        run: node --check index.js
+
+  go:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        concept:
+          - 01-basic-llm-call
+          - 02-structured-output
+          - 03-agent-loop
+          - 04-rag-pipeline
+          - 05-context-assembly
+          - 06-multi-agent
+          - 07-langgraph-exploration
+          - 08-harness
+          - 09-skills
+          - 10-mcp-server
+          - 11-eval-suite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Build or syntax check ${{ matrix.concept }}
+        working-directory: code/go/${{ matrix.concept }}
+        run: |
+          if [ -s go.mod ]; then
+            go mod download
+            go build ./...
+          elif [ -s main.go ]; then
+            gofmt -e main.go
+          fi

@@ -1,0 +1,13 @@
+{
+  "name": "01-basic-llm-call",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Token counting with js-tiktoken",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.15"
+  }
+}
