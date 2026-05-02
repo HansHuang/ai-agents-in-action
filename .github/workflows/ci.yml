@@ -36,7 +36,7 @@ jobs:
           fi
       - name: Syntax check ${{ matrix.concept }}
         working-directory: code/python/${{ matrix.concept }}
-        run: python -m py_compile main.py
+        run: python -m compileall -q .
 
   nodejs:
     runs-on: ubuntu-latest
@@ -60,6 +60,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: code/nodejs/${{ matrix.concept }}/package-lock.json
       - name: Install dependencies for ${{ matrix.concept }}
         working-directory: code/nodejs/${{ matrix.concept }}
         run: |
