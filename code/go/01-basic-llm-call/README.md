@@ -12,7 +12,7 @@ Demonstrates token counting for OpenAI-compatible models using `tiktoken-go`.
 ## Prerequisites
 
 ```bash
-go mod download
+go mod tidy
 ```
 
 ## Run

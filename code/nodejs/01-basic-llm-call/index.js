@@ -8,7 +8,7 @@
 
 import { encodingForModel } from "js-tiktoken";
 
-const MODEL = "gpt-4o";
+const MODEL = "gpt-5";
 
 /**
  * Return the number of tokens in `text` for the given model.

@@ -30,9 +30,9 @@ code/ → Runnable implementations by language.
 
 ## Roadmap
 
-- [ ] Foundations: LLMs, prompts, structured output
-- [ ] The agent loop: anatomy, tools, planning, multi-agent
-- [ ] Memory and retrieval: short-term, embeddings, RAG
+- [x] Foundations: LLMs, prompts, structured output
+- [x] The agent loop: anatomy, tools, planning, multi-agent
+- [x] Memory and retrieval: short-term, embeddings, RAG
 - [ ] The tool ecosystem: providers, vector DBs, observability
 - [ ] Frameworks in practice: LangChain, LangGraph, CrewAI, Vercel AI SDK
 - [ ] Evaluation and guardrails

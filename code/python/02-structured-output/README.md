@@ -19,6 +19,8 @@ Demonstrates structured output extraction: function calling, JSON schema, Instru
 ## Prerequisites
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 export OPENAI_API_KEY=your_key_here
 pip install -r requirements.txt
 ```

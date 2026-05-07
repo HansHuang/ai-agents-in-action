@@ -1,0 +1,17 @@
+{
+  "name": "observability",
+  "version": "1.0.0",
+  "description": "Agent observability system: tracing, logging, metrics, token accounting",
+  "type": "module",
+  "main": "agent_observability.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node agent_observability.js",
+    "dev": "ts-node agent_observability.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  }
+}

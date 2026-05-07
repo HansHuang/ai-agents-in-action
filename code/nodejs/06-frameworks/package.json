@@ -1,0 +1,26 @@
+{
+  "name": "06-frameworks",
+  "version": "1.0.0",
+  "description": "Hybrid RAG agent: LangChain.js for commodity ops, Vercel AI SDK for LLM calls, custom code for agent logic.",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx hybrid_rag_agent.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "^4.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "openai": "^4.0.0"
+  },
+  "optionalDependencies": {
+    "langchain": "^0.3.0",
+    "@langchain/openai": "^0.3.0",
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}

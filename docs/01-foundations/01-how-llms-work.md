@@ -24,7 +24,7 @@ Every other capability — agents, tools, RAG — is just engineering layered on
 ## Tokens: The Atoms of Language Models
 
 ### What Is a Token?
-A token is roughly 0.75 words or 4 characters in English. "Hello world" = 2 tokens. "Inexplicable" = 1 token. Languages like Chinese use more tokens per concept.
+A token is roughly 0.7–0.8 words (about 3–4 characters) in English, "Hello world" = 2 tokens. "Inexplicable" = 1 token, common Chinese characters are 1 token each (rare ones 2 tokens each), and long words in agglutinative languages like German can be 3–10 tokens per word.
 
 ### Why Tokens Matter
 - **Cost**: You pay per token (input + output)
@@ -40,24 +40,8 @@ Always count tokens *before* sending a request, not after. Libraries wrap the sa
 ```python
 import tiktoken
 
-enc = tiktoken.encoding_for_model("gpt-4o")
+enc = tiktoken.encoding_for_model("gpt-5.5")
 print(len(enc.encode("Your text here")))  # → token count
-```
-
-**Node.js** — [`js-tiktoken`](https://github.com/dqbd/tiktoken)
-```js
-import { encodingForModel } from "js-tiktoken";
-
-const enc = encodingForModel("gpt-4o");
-console.log(enc.encode("Your text here").length);
-```
-
-**Go** — [`tiktoken-go`](https://github.com/pkoukk/tiktoken-go)
-```go
-import tiktoken "github.com/pkoukk/tiktoken-go"
-
-enc, _ := tiktoken.EncodingForModel("gpt-4o")
-fmt.Println(len(enc.Encode("Your text here", nil, nil)))
 ```
 
 > **Code** → [Python](../../code/python/01-basic-llm-call/) · [Node.js](../../code/nodejs/01-basic-llm-call/) · [Go](../../code/go/01-basic-llm-call/)  

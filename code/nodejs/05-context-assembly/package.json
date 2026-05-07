@@ -1,0 +1,22 @@
+{
+  "name": "05-context-assembly",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Context budget management and dynamic assembly for LLM agents",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx tsx context_assembler.ts",
+    "demo:budget": "npx tsx context_budget.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "tiktoken": "^1.0.15",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0",
+    "@types/js-yaml": "^4.0.9"
+  }
+}

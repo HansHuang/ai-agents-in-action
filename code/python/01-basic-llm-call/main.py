@@ -9,12 +9,22 @@ from __future__ import annotations
 
 import tiktoken
 
-MODEL = "gpt-4o"
+MODEL = "gpt-5.5"
+
+
+def _get_encoding(model: str):
+    """Return a tiktoken encoding for the model, with a safe fallback."""
+    try:
+        return tiktoken.encoding_for_model(model)
+    except (KeyError, ValueError):
+        # Some tiktoken versions may not know about newer model aliases.
+        # Fall back to the cl100k_base encoding used by OpenAI chat models.
+        return tiktoken.get_encoding("cl100k_base")
 
 
 def count_tokens(text: str, model: str = MODEL) -> int:
     """Return the number of tokens in *text* for the given model."""
-    enc = tiktoken.encoding_for_model(model)
+    enc = _get_encoding(model)
     return len(enc.encode(text))
 
 
@@ -25,7 +35,7 @@ def count_messages_tokens(messages: list[dict], model: str = MODEL) -> int:
     tokens) that the API adds automatically.
     See: https://platform.openai.com/docs/guides/chat/managing-tokens
     """
-    enc = tiktoken.encoding_for_model(model)
+    enc = _get_encoding(model)
     tokens_per_message = 3
     tokens_per_name = 1
     total = 0

@@ -26,6 +26,14 @@ See: [docs/02-the-agent-loop/05-skills-composing-capabilities.md](../../../docs/
 
 ---
 
+## Prerequisites
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 ## Quick Start
 
 ```python

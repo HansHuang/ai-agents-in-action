@@ -25,9 +25,25 @@ Documents
     LLM Answer  ←  grounded in your documents
 ```
 
-## Files
+## What This Folder Demonstrates
+
+From in-memory prototype to production vector database — every step:
+
+1. **Prototype** — `simple_vector_store.py` / `SimpleVectorStore`: brute-force cosine similarity, zero dependencies, works for ≤10 K documents.
+2. **Abstract** — `vector_database.py`: swap any backend with a single config change.
+3. **Retrieve better** — `hybrid_search.py`: combine vector similarity with BM25 keyword ranking so "Error 503" beats "server error" when the exact code matters.
+4. **Stay fresh** — `embedding_sync.py`: full and incremental sync managers keep your index in step with the source document store.
+
+> **Key insight:** Abstract your vector database early. Switching from Chroma (dev) to Pinecone (prod) should be a one-line config change — and with `VectorDBFactory` it is.
 
 ## Files
+
+### Vector Databases
+| File | Description |
+|---|---|
+| `vector_database.py` | Multi-backend abstraction: Chroma, Qdrant, Pinecone, pgvector, SimpleVectorStore |
+| `hybrid_search.py` | Vector + BM25 combined search; weighted-sum and RRF fusion |
+| `embedding_sync.py` | Full and incremental sync manager; health verification |
 
 ### RAG Core
 | File | Description |
@@ -57,26 +73,91 @@ Documents
 | `test_embeddings.py` | Embedding and vector store tests |
 | `test_memory_manager.py` | Memory manager tests |
 
+## Supported Backends
+
+| Backend | Best For | Install |
+|---|---|---|
+| `SimpleVectorStore` | Tests, prototypes, ≤10 K docs | built-in |
+| `ChromaDB` | Local dev, no server needed | `pip install chromadb` |
+| `QdrantDB` | Performance, rich metadata filtering | `pip install qdrant-client` |
+| `PineconeDB` | Managed cloud, zero ops | `pip install pinecone-client` |
+| `PgvectorDB` | Teams already on PostgreSQL | `pip install psycopg2-binary pgvector` |
+
+Switch backends with one config change:
+
+```python
+# Development
+db = VectorDBFactory.create("chroma", collection_name="my_docs")
+
+# Production — same interface, different backend
+db = VectorDBFactory.create("qdrant", host="localhost", port=6333,
+                            collection_name="my_docs", dimension=1536)
+
+# Or from a config dict (YAML/env-driven)
+db = VectorDBFactory.create_from_config({
+    "type": "pinecone",
+    "api_key": os.environ["PINECONE_API_KEY"],
+    "index_name": "my_docs",
+})
+```
+
+## Architecture
+
+```
+Documents
+    │
+    ▼  INGEST
+┌───────────────┐   chunk → embed → store
+│ Vector Store  │   (VectorDatabase ABC — any backend)
+└───────┬───────┘
+        │  RETRIEVE
+        │  embed query → vector search
+        │              → BM25 keyword search (optional)
+        │              → fuse with weighted sum or RRF
+        ▼
+┌───────────────┐   AUGMENT
+│  RAG Prompt   │   inject retrieved chunks into system prompt
+└───────┬───────┘
+        │  GENERATE
+        ▼
+    LLM Answer  ←  grounded in your documents
+```
+
+## Prerequisites
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 ## Quick Start
 
 ```python
 from embedding_generator import EmbeddingGenerator
-from simple_vector_store import SimpleVectorStore
+from vector_database import VectorDBFactory, VectorDocument
 from rag_pipeline import RAGPipeline
 
+# Pick any backend — same code from here on
+db = VectorDBFactory.create("chroma", collection_name="my_docs")
 embedder = EmbeddingGenerator(model="text-embedding-3-small")
-vector_store = SimpleVectorStore()
-pipeline = RAGPipeline(vector_store, embedder)
+pipeline = RAGPipeline(db, embedder)
 
-# Ingest documents
 pipeline.ingest_text("Returns: 30 days with receipt.", metadata={"source": "policy.md"})
-pipeline.ingest_text("Shipping: $4.99 standard, $14.99 express.", metadata={"source": "shipping.md"})
-
-# Query
 response = pipeline.query("What is the return window?")
-print(response.answer)   # → grounded answer
-print(response.sources)  # → ["policy.md"]
-print(response.similarity_scores)
+print(response.answer)
+```
+
+## Hybrid Search Quick Start
+
+```python
+from hybrid_search import HybridSearch
+
+hs = HybridSearch(db, vector_weight=0.7)
+hs.build_keyword_index(docs)
+
+results = hs.search("Error 503", query_embedding=embed("Error 503"), k=5)
+# Doc containing literal "503" is ranked above semantically similar docs
 ```
 
 ## RAG + Agent Integration
@@ -88,25 +169,28 @@ from rag_agent import RAGAgent
 
 agent = RAGAgent(rag_pipeline=pipeline)
 result = agent.run("What is our vacation policy?")
-# Agent calls search_knowledge_base("vacation policy") automatically
-print(result.decision_trail)  # shows routing decision
+print(result.decision_trail)
 ```
 
 ## Tests
 
 ```bash
-# Offline unit tests (no API key)
-pytest test_rag_pipeline.py -m "not integration" -v
+# Fast tests — no external services required
+pytest test_vector_database.py -m "not integration" -v
 
-# Full suite with live API calls
+# Integration tests — requires Chroma and Qdrant running locally
+pytest test_vector_database.py -v
+
+# Full RAG suite
 OPENAI_API_KEY=sk-... pytest test_rag_pipeline.py -v
 ```
 
 ## Docs
 
-[docs/03-memory-and-retrieval/03-rag-from-scratch.md](../../../docs/03-memory-and-retrieval/03-rag-from-scratch.md)
+- [docs/03-memory-and-retrieval/03-rag-from-scratch.md](../../../docs/03-memory-and-retrieval/03-rag-from-scratch.md)
+- [docs/05-the-tool-ecosystem/02-vector-databases.md](../../../docs/05-the-tool-ecosystem/02-vector-databases.md)
 
 ## Cross-Reference
 
-- TypeScript port: [code/nodejs/04-rag-pipeline/rag_pipeline.ts](../../nodejs/04-rag-pipeline/rag_pipeline.ts)
-- Go port: [code/go/04-rag-pipeline/rag_pipeline.go](../../go/04-rag-pipeline/rag_pipeline.go)
+- TypeScript port: [code/nodejs/04-rag-pipeline/vector_database.ts](../../nodejs/04-rag-pipeline/vector_database.ts)
+- Go port: [code/go/04-rag-pipeline/vector_database.go](../../go/04-rag-pipeline/vector_database.go)

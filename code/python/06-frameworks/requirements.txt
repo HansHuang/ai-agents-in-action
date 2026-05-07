@@ -1,0 +1,12 @@
+# Core (required for all scripts)
+openai>=1.75.0
+numpy>=1.26.0
+pytest>=9.0.0
+
+# Framework scripts (optional — scripts degrade gracefully without these)
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.0
+faiss-cpu>=1.8.0

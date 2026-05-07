@@ -1,0 +1,22 @@
+{
+  "name": "ai-agents-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP weather server and MCP-enabled agent — Node.js/TypeScript",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "weather-server": "tsx weather_mcp_server/server.ts",
+    "agent": "tsx mcp_agent.ts",
+    "start": "node dist/weather_mcp_server/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "openai": "^4.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

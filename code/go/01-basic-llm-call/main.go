@@ -12,7 +12,7 @@ import (
 	tiktoken "github.com/pkoukk/tiktoken-go"
 )
 
-const model = "gpt-4o"
+const model = "gpt-4.5"
 
 // countTokens returns the number of tokens in text for the given model.
 func countTokens(text, model string) (int, error) {
