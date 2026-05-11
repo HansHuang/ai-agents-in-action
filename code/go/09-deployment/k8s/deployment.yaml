@@ -1,0 +1,165 @@
+# ============================================================
+# k8s/deployment.yaml — Kubernetes Deployment
+#
+# Production notes:
+#   • Change image tag from :latest to a specific SHA for reproducibility.
+#   • Replace secret references with your secret manager integration
+#     (e.g., AWS Secrets Manager CSI driver, Vault Agent injector).
+#   • Adjust resource requests/limits based on real profiling data.
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-service
+  namespace: production        # Change to "staging" for the staging environment
+  labels:
+    app: agent-service
+    version: v1
+spec:
+  # Minimum 3 replicas for high availability.
+  # The HPA (hpa.yaml) scales this up to 20 based on load.
+  replicas: 3
+  selector:
+    matchLabels:
+      app: agent-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Replace at most 1 pod at a time during rollouts (safe for stateful conns)
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: agent-service
+        version: v1
+      annotations:
+        # Tell Prometheus to scrape this pod
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Use a dedicated service account with minimal RBAC permissions
+      serviceAccountName: agent-service-sa
+
+      # Graceful shutdown: wait up to 30s for in-flight requests to complete
+      terminationGracePeriodSeconds: 30
+
+      # Spread pods across nodes to avoid a single-node failure taking down all replicas
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - agent-service
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: agent-service
+          image: your-registry/ai-agent-service-go:latest  # Replace with specific tag
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+
+          # Environment from ConfigMap (non-sensitive configuration)
+          envFrom:
+            - configMapRef:
+                name: agent-config
+
+          # Secrets injected as environment variables
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: openai-api-key
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: anthropic-api-key
+
+          # Resource requests and limits.
+          # Requests: what k8s reserves for scheduling.
+          # Limits: hard cap (OOMKill if exceeded for memory).
+          resources:
+            requests:
+              cpu: "500m"       # 0.5 vCPU
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"      # 2 vCPU (handles burst LLM parsing)
+              memory: "2Gi"
+
+          # Readiness probe: traffic is only sent to a pod that passes this.
+          # initial delay of 10s allows the harness to initialise.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Liveness probe: the pod is restarted if this fails.
+          # Longer initial delay because the harness may take time to warm up.
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # Startup probe: allows extra time for slow cold starts.
+          # Disables readiness/liveness until startup is confirmed.
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            failureThreshold: 12   # 12 × 5s = 60s max startup time
+            periodSeconds: 5
+
+          # Send SIGTERM on shutdown; uvicorn handles graceful drain
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]  # Allow load balancer to deregister
+
+---
+# Non-sensitive configuration as a ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: production
+data:
+  DEFAULT_MODEL: "gpt-4o-mini"
+  REQUEST_TIMEOUT_SECONDS: "120"
+  STREAM_TIMEOUT_SECONDS: "300"
+  LOG_LEVEL: "INFO"
+  DAILY_BUDGET_USD: "1000.0"
+  USER_DAILY_BUDGET_USD: "10.0"
+  GLOBAL_RATE_LIMIT_RPS: "1000"
+  PER_USER_RATE_LIMIT_RPM: "60"
+  ALLOWED_ORIGINS: '["https://your-domain.com"]'
+
+---
+# ServiceAccount with minimal RBAC (principle of least privilege)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-service-sa
+  namespace: production
+  annotations:
+    # For AWS: bind an IAM role via IRSA instead of long-lived credentials
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/agent-service-role
+    {}

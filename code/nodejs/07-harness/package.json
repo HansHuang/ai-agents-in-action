@@ -1,0 +1,22 @@
+{
+  "name": "07-harness",
+  "version": "1.0.0",
+  "description": "Harness engineering — TypeScript",
+  "main": "dist/input_guardrail_pipeline.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/input_guardrail_pipeline.js",
+    "dev": "ts-node input_guardrail_pipeline.ts",
+    "demo:router": "ts-node hybrid_router.ts"
+  },
+  "dependencies": {
+    "openai": "^4.52.0",
+    "tsx": "^4.21.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}

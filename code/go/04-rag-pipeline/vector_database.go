@@ -125,21 +125,21 @@ type simpleDoc struct {
 	metadata  map[string]interface{}
 }
 
-// SimpleVectorStore is an in-memory vector store — no external dependencies.
+// InMemoryVecStore is an in-memory vector store implementing VectorDatabase.
 //
 // Uses brute-force O(n) cosine similarity.  Suitable for tests, prototyping,
 // and datasets up to ~10,000 documents.
-type SimpleVectorStore struct {
+type InMemoryVecStore struct {
 	mu   sync.RWMutex
 	docs []simpleDoc
 }
 
-// NewSimpleVectorStore creates an empty SimpleVectorStore.
-func NewSimpleVectorStore() *SimpleVectorStore {
-	return &SimpleVectorStore{}
+// NewInMemoryVecStore creates an empty InMemoryVecStore.
+func NewInMemoryVecStore() *InMemoryVecStore {
+	return &InMemoryVecStore{}
 }
 
-func (s *SimpleVectorStore) Insert(documents []VecDocument) (int, error) {
+func (s *InMemoryVecStore) Insert(documents []VecDocument) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, doc := range documents {
@@ -160,7 +160,7 @@ func (s *SimpleVectorStore) Insert(documents []VecDocument) (int, error) {
 	return len(documents), nil
 }
 
-func (s *SimpleVectorStore) Search(queryEmbedding []float64, k int, filterMetadata map[string]interface{}) ([]VecSearchResult, error) {
+func (s *InMemoryVecStore) Search(queryEmbedding []float64, k int, filterMetadata map[string]interface{}) ([]VecSearchResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -187,7 +187,7 @@ func (s *SimpleVectorStore) Search(queryEmbedding []float64, k int, filterMetada
 	return results, nil
 }
 
-func (s *SimpleVectorStore) Delete(ids []string) (int, error) {
+func (s *InMemoryVecStore) Delete(ids []string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idSet := make(map[string]bool, len(ids))
@@ -205,20 +205,20 @@ func (s *SimpleVectorStore) Delete(ids []string) (int, error) {
 	return before - len(s.docs), nil
 }
 
-func (s *SimpleVectorStore) Count() (int, error) {
+func (s *InMemoryVecStore) Count() (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.docs), nil
 }
 
-func (s *SimpleVectorStore) Clear() error {
+func (s *InMemoryVecStore) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.docs = s.docs[:0]
 	return nil
 }
 
-func (s *SimpleVectorStore) BatchInsert(documents []VecDocument, batchSize int) (int, error) {
+func (s *InMemoryVecStore) BatchInsert(documents []VecDocument, batchSize int) (int, error) {
 	return defaultBatchInsert(s, documents, batchSize)
 }
 
@@ -838,7 +838,7 @@ type VectorDBFactory struct{}
 func (VectorDBFactory) Create(cfg VectorDBConfig) (VectorDatabase, error) {
 	switch strings.ToLower(cfg.Type) {
 	case "simple":
-		return NewSimpleVectorStore(), nil
+		return NewInMemoryVecStore(), nil
 	case "chroma":
 		host := cfg.Host
 		if host == "" {
@@ -917,7 +917,7 @@ func matchesFilter(meta, filter map[string]interface{}) bool {
 // Demo (called from main.go or tests)
 // ---------------------------------------------------------------------------
 
-// RunVectorDatabaseDemo demonstrates the SimpleVectorStore backend.
+// RunVectorDatabaseDemo demonstrates the InMemoryVecStore backend.
 func RunVectorDatabaseDemo() {
 	const dim = 64
 	const nDocs = 100
@@ -952,7 +952,7 @@ func RunVectorDatabaseDemo() {
 		}
 	}
 
-	db := NewSimpleVectorStore()
+	db := NewInMemoryVecStore()
 
 	t0 := time.Now()
 	inserted, _ := db.BatchInsert(docs, 50)
@@ -966,7 +966,7 @@ func RunVectorDatabaseDemo() {
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("Vector Database Abstraction Demo (Go)")
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("\n[SimpleVectorStore]\n")
+	fmt.Printf("\n[InMemoryVecStore]\n")
 	fmt.Printf("  Inserted %d docs in %.1f ms\n", inserted, insertMs)
 	fmt.Printf("  Top-5 search in %.2f ms\n", searchMs)
 	fmt.Printf("  Count: %d\n", count)

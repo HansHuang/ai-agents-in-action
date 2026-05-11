@@ -513,10 +513,11 @@ func min(a, b int) int {
 }
 
 // ---------------------------------------------------------------------------
-// main (demo)
+// runHybridRAGAgentDemo demonstrates the hybrid RAG agent.
+// Called from main() in multi_agent_from_scratch.go or run standalone.
 // ---------------------------------------------------------------------------
 
-func main() {
+func runHybridRAGAgentDemo() {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		fmt.Fprintln(os.Stderr, "OPENAI_API_KEY not set")

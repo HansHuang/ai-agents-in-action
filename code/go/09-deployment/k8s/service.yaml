@@ -1,0 +1,37 @@
+# ============================================================
+# k8s/service.yaml — Kubernetes Service
+#
+# ClusterIP: internal-only traffic within the cluster.
+# Ingress (ingress.yaml) exposes this service to the outside world.
+#
+# Session affinity is set to ClientIP for streaming connections.
+# This ensures SSE streams are not interrupted by load balancer
+# re-routing mid-stream.
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-service
+  namespace: production
+  labels:
+    app: agent-service
+  annotations:
+    # Tell Prometheus to scrape the /metrics endpoint via this service
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  # Session affinity keeps SSE streaming connections routed to the same pod.
+  # Without this, nginx may round-robin an existing SSE stream to a new pod.
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 300   # Match stream_timeout_seconds
+  selector:
+    app: agent-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080

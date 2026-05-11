@@ -1,0 +1,94 @@
+# ============================================================
+# docker-compose.yml — Local development stack (Node.js)
+#
+# Services:
+#   agent    — Express agent service (code/nodejs/09-deployment/)
+#   redis    — Session state & rate-limit counters
+#   qdrant   — Vector database
+# ============================================================
+
+services:
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ai-agent-service-nodejs:local
+    container_name: agent-service-nodejs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4o-mini}
+      REQUEST_TIMEOUT_MS: "120000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DAILY_BUDGET_USD: "100.0"
+      USER_DAILY_BUDGET_USD: "5.0"
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      PORT: "3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    volumes:
+      - .:/app:ro
+    networks:
+      - agent-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    networks:
+      - agent-net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: agent-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - agent-net
+
+volumes:
+  redis-data:
+  qdrant-data:
+
+networks:
+  agent-net:
+    driver: bridge

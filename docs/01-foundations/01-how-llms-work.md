@@ -1,122 +1,502 @@
 # How LLMs Actually Work
 
 ## What You'll Learn
-- What happens when you call `openai.chat.completions.create()`
-- Tokens, context windows, and why they matter
-- Temperature, top-p, and controlling randomness
-- The difference between base models and instruction-tuned models
+
+* What happens when you call `openai.chat.completions.create()`
+* Tokens, context windows, and why they matter
+* Temperature, top-p, and controlling randomness
+* The difference between base models and instruction-tuned models
+* Why context engineering and memory management exist
 
 ---
 
-## The 30-Second Mental Model
+# The 30-Second Mental Model
 
-An LLM is a **token prediction engine**. You give it a sequence of tokens (words or word fragments), and it predicts the next most likely token. That's it. ChatGPT's eloquence, Claude's reasoning, Gemini's creativity — all emerge from this one mechanism.
+An LLM fundamentally works by predicting the next token from prior tokens. Modern reasoning models add additional inference-time techniques on top of this, but next-token prediction remains the core mechanism.
 
-```
+You give the model a sequence of tokens (words or word fragments), and it predicts the most likely next token.
+
+```text
 Input: "The capital of France is"
 Output: " Paris"
+
 Input: "The capital of France is Paris"
 Output: "."
 ```
 
-Every other capability — agents, tools, RAG — is just engineering layered on top of this fundamental loop.
+ChatGPT's eloquence, Claude's reasoning, Gemini's creativity, and AI agents themselves all emerge from this iterative prediction loop.
 
-## Tokens: The Atoms of Language Models
+Every other capability — agents, tools, RAG, memory, workflows — is engineering layered on top of this fundamental process.
 
-### What Is a Token?
-A token is roughly 0.7–0.8 words (about 3–4 characters) in English, "Hello world" = 2 tokens. "Inexplicable" = 1 token, common Chinese characters are 1 token each (rare ones 2 tokens each), and long words in agglutinative languages like German can be 3–10 tokens per word.
+---
 
-### Why Tokens Matter
-- **Cost**: You pay per token (input + output)
-- **Latency**: More tokens = slower response
-- **Context Window**: There's a hard limit on input tokens
-- **Hidden tokens**: Your system prompt and tool definitions consume tokens on every single request. A 2,000-token system prompt with a 500-token tool definition means every user message starts 2,500 tokens in the hole — even for a one-word query like "Hello."
+# Tokens: The Atoms of Language Models
 
-### Token Counting
+## What Is a Token?
 
-Always count tokens *before* sending a request, not after. Libraries wrap the same BPE tokenizer used by the models.
+A token is a chunk of text used internally by the model.
 
-**Python** — [`tiktoken`](https://github.com/openai/tiktoken)
+In English:
+
+* `"Hello world"` → ~2 tokens
+* `"inexplicable"` → may be 1 token
+* punctuation and spaces can also be tokens
+
+Rules vary by tokenizer and language:
+
+* Common Chinese characters are often 1 token each
+* Rare Chinese characters may use multiple tokens
+* Long German compound words can become many tokens
+* Code tends to tokenize densely
+
+A useful mental estimate:
+
+* 1 token ≈ 0.75 English words
+* 1 token ≈ 4 characters
+
+> Different models use different tokenizers. The same text may be 100 tokens with GPT but 130 tokens with Claude. Always count tokens with the specific tokenizer for your chosen model.
+
+## Why Tokens Matter
+
+Tokens directly affect nearly every production concern.
+
+### Cost
+
+Most providers charge per token:
+
+* Input tokens
+* Output tokens
+* Sometimes cached/reasoning tokens separately
+
+More tokens = higher cost.
+
+### Latency
+
+More tokens generally mean:
+
+* longer upload time
+* more model computation
+* slower generation
+
+### Context Window Limits
+
+Models have a maximum context window. If your conversation exceeds it:
+
+* older messages may be truncated
+* requests may fail
+* important information may disappear
+
+### Hidden Tokens
+
+Many developers underestimate hidden token usage.
+
+These all consume tokens on every request:
+
+* system prompts
+* tool definitions
+* schemas
+* retrieved documents
+* conversation history
+
+A 2,000-token system prompt plus a 500-token tool definition means every user request starts 2,500 tokens in the hole — even if the user only says:
+
+```text
+Hello
+```
+
+---
+
+# Token Counting
+
+In production systems, estimate or count tokens before requests whenever cost, latency, or truncation matters.
+
+Most providers expose tokenizer libraries compatible with their models.
+
+## Python — `tiktoken`
+
+[tiktoken](https://github.com/openai/tiktoken)
+
 ```python
 import tiktoken
 
 enc = tiktoken.encoding_for_model("gpt-5.5")
-print(len(enc.encode("Your text here")))  # → token count
+
+text = "Your text here"
+
+tokens = enc.encode(text)
+
+print(len(tokens))
 ```
 
-> **Code** → [Python](../../code/python/01-basic-llm-call/) · [Node.js](../../code/nodejs/01-basic-llm-call/) · [Go](../../code/go/01-basic-llm-call/)  
-> Each folder contains a full example that counts tokens for both a plain string and a `messages` array, mirroring what the API actually charges you for.
+> **Code Examples**: [Python](../../code/python/01-basic-llm-call/) | [Node.js](../../code/nodejs/01-basic-llm-call/) | [Go](../../code/go/01-basic-llm-call/), each example counts tokens for
+>
+> * plain strings
+> * full `messages` arrays
+>
+> This mirrors what APIs actually bill you for.
 
-## The Context Window: The Model's Working Memory
+---
 
-The context window is the maximum number of tokens the model can "see" at once. For GPT-5.4 it's 272K tokens, for Claude 4.6 or DeepSeek v4 it's 1M tokens.
+# The Context Window: The Model's Working Memory
 
-### What Counts Against the Window
-- System prompt
-- Conversation history
-- User's current message
-- Tool definitions
-- Retrieved documents (RAG)
-- The model's own output (as it generates)
+The context window is the maximum number of tokens the model can see at once.
 
-### The Engineering Implication
-You are always budgeting a scarce resource. This is why context engineering (Chapter 04) and memory management (Chapter 03) exist.
+Modern frontier models range from roughly ~100K tokens to 1M+ tokens depending on provider and model family.
 
-## Temperature: Controlling Creativity
+## What Counts Against the Window
 
-Temperature controls how "random" the model's outputs are. Most providers use a scale from 0 to 2 (OpenAI) or 0 to 1 (Anthropic), but the behavior is consistent across ranges.
+Everything visible to the model consumes context space:
 
-| Temp | Behavior | Use Case |
-|:---|:---|:---|
-| 0 | Deterministic, always picks highest-probability token | Structured data extraction, math |
-| 0.3-0.7 | Balanced | General assistant tasks |
-| 0.8-1.2 | Creative, varied | Brainstorming, creative writing |
-| 1.5+ | Chaotic, often incoherent | Rarely useful |
+* System prompt
+* Conversation history
+* User message
+* Tool definitions
+* Retrieved documents (RAG)
+* Structured output schemas
+* The model's own generated output
 
-> **Rule of thumb**: For agents, use temperature 0 for function calling and structured output. Use 0.3-0.7 for natural language responses.
+A critical detail many beginners miss:
 
-## Base Models vs. Instruction-Tuned Models
+> Output tokens consume the same context window.
 
-| Base Model | Instruction-Tuned Model |
-|:---|:---|
-| Trained to predict next token on internet text | Fine-tuned to follow instructions |
-| You prompt: "The capital of France" | You prompt: "What is the capital of France?" |
-| It continues: "is Paris, a city known for..." | It answers: "The capital of France is Paris." |
-| Raw, unpredictable | Helpful, conversational |
-| Use for: custom fine-tuning | Use for: 99% of applications |
+If a model has a 128K context window and your input already uses 127K tokens, the model only has room to generate roughly 1K output tokens before hitting the limit.
 
-Today, every major model you interact with (Claude, GPT-4o, Gemini, Kimi) is instruction-tuned. The base model is an internal artifact; the instruction-tuned version is the product you use.
+## Why Long Contexts Are Expensive
 
-## The API Call Deconstructed
+Long contexts do not just increase bandwidth, they increase computation.
 
-Here's what actually happens when your code calls the API:
+Transformer models perform attention across the visible token sequence during generation. As context grows:
 
+* latency increases
+* compute increases
+* inference becomes more expensive
+
+This is why context engineering becomes a core discipline for AI agents.
+
+## System Prompts Are Still Just Tokens
+
+A common misconception is that system prompts are somehow "outside" the model. They are not.
+
+Internally, system prompts are still tokens inside the context window. Providers may structure or prioritize them differently, but the model ultimately processes them as part of the same sequence.
+
+This becomes important later when discussing:
+
+* prompt injection
+* instruction hierarchy
+* context poisoning
+* agent security
+
+---
+
+# Why Context Engineering Exists
+
+You are always managing a scarce resource:
+
+* context space
+* latency budget
+* token cost
+* model attention
+
+This is why disciplines like:
+
+* context engineering
+* memory management
+* retrieval design
+
+exist in modern AI systems.
+
+Briefly:
+
+* **Context engineering** = deciding what enters the context window
+* **Memory management** = deciding what persists over time
+* **Retrieval (RAG)** = fetching external information dynamically
+
+---
+
+# Temperature: Controlling Randomness
+
+Temperature controls sampling randomness during token generation.
+
+Lower temperatures make outputs more predictable. Higher temperatures increase variation and exploration.
+
+| Temperature | Behavior                              | Common Use Cases                     |
+| ----------- | ------------------------------------- | ------------------------------------ |
+| 0           | Lowest randomness, usually repeatable | Structured output, extraction, tools |
+| 0.3–0.7     | Balanced                              | General assistants                   |
+| 0.8–1.2     | More varied and creative              | Brainstorming, writing               |
+| 1.5+        | Chaotic, often incoherent             | Rarely useful                        |
+
+## Important Nuance About Temperature 0
+
+Temperature 0 reduces randomness but does not guarantee identical outputs.
+
+You may still observe variation due to:
+
+* provider infrastructure
+* backend routing
+* batching
+* floating-point nondeterminism
+* model updates
+
+For production agents:
+
+* use low temperature for reliability
+* never assume perfect determinism
+
+## Rule of Thumb for Agents
+
+For most agent systems:
+
+* `temperature = 0`
+
+  * function calling
+  * JSON generation
+  * structured output
+  * deterministic workflows
+
+* `temperature = 0.3–0.7`
+
+  * conversational responses
+  * summaries
+  * explanations
+
+Higher temperatures are usually counterproductive for autonomous systems.
+
+---
+
+# Top-p: Alternative Sampling Control
+
+Temperature is not the only sampling parameter.
+
+`top_p` (nucleus sampling) limits token selection to the smallest probability set whose cumulative probability exceeds `p`.
+
+Example:
+
+* `top_p = 0.9`
+* Model only samples from tokens covering the top 90% probability mass
+
+In practice:
+
+* Use temperature for general control over randomness (simpler mental model)
+* Use top-p when you want to dynamically adapt to the probability distribution (e.g., `top_p=0.9` means "consider only the most likely tokens that together represent 90% of the probability mass")
+* Many providers recommend adjusting either `temperature` or `top_p`, not both simultaneously
+
+---
+
+# Base Models vs. Instruction-Tuned Models
+
+| Base Model                        | Instruction-Tuned Model           |
+| --------------------------------- | --------------------------------- |
+| Trained to continue internet text | Fine-tuned to follow instructions |
+| Raw next-token continuation       | Optimized for helpful interaction |
+| Unpredictable                     | Conversational                    |
+| Often unsafe/unfiltered           | Aligned and constrained           |
+| Used for research/fine-tuning     | Used for real applications        |
+
+Example:
+
+| Prompt                    | Base Model                         | Instruction Model                   |
+| ------------------------- | ---------------------------------- | ----------------------------------- |
+| `"The capital of France"` | `" is Paris, a city known for..."` | `"The capital of France is Paris."` |
+
+Today, virtually every major production model: GPT, Claude, Gemini, Kimi, DeepSeek is instruction-tuned.
+
+The raw base model is usually an internal artifact rather than the product developers interact with directly.
+
+---
+
+# The API Call Deconstructed
+
+When your code calls an LLM API, the process roughly looks like this:
+
+```text
+1. Client sends:
+   - model
+   - messages
+   - temperature
+   - tools (optional)
+   - generation settings
+
+2. Server tokenizes the input
+
+3. Model processes the full visible context
+
+4. Model predicts the next token probability distribution
+
+5. Sampling logic selects the next token
+
+6. Selected token is appended to the context
+
+7. Steps 4–6 repeat until:
+   - end-of-sequence token
+   - max_tokens reached
+   - stop sequence triggered
+
+8. Tokens are detokenized back into text
+
+9. Server returns:
+   - generated content
+   - token usage
+   - finish reason
 ```
-1. You send: model, messages, temperature, tools (optional)
-2. Server tokenizes your input
-3. Model processes the full context through its neural network
-4. Model predicts the next token
-5. That token is added to the context
-6. Repeat steps 4-5 until model predicts an "end" token or hits max_tokens
-7. Server detokenizes the output tokens back to text
-8. You receive: response with content, token usage, finish reason
+
+---
+
+# Streaming Responses
+
+Most modern APIs support token streaming.
+
+Instead of waiting for the full response:
+
+* the server streams tokens incrementally as they're generated
+* the UI renders text progressively
+* tool calls can be streamed as they're decided
+
+Streaming improves:
+
+* perceived responsiveness (users see activity immediately)
+* conversational UX (feels like real-time dialogue)
+* agent interactivity (tool calls and results appear as they happen)
+
+Even though the model generates tokens sequentially internally, streaming transforms the user experience from "wait and see" to "watch it think."
+
+Streaming is foundational to the Vercel AI SDK (Chapter 06) and is a key deployment consideration (Chapter 09).
+
+---
+
+# The Five Parameters Every Developer Should Know
+
+Before optimizing exotic settings, master these five:
+
+## 1. `model`
+
+Determines: capability, speed, context size, cost
+
+## 2. `messages`
+
+The conversation itself:
+
+```python
+[
+  {"role": "system", "content": "..."},
+  {"role": "user", "content": "..."}
+]
 ```
 
-## The Three Parameters Every Developer Should Know
+This is the primary interface to the model.
 
-1. **`model`**: Which model to use. Determines capability, cost, speed.
-2. **`messages`**: The conversation array. `[{role, content}, ...]`
-3. **`temperature`**: Control knob for randomness.
+## 3. `temperature`
 
-Everything else (top_p, frequency_penalty, presence_penalty) is optional fine-tuning. Master these three first.
+Controls output randomness and variation.
 
-## Common Pitfalls
+* Lower: more predictable
+* Higher: more diverse
 
-- **"The model is hallucinating"**: It's not hallucinating — it's doing exactly what it was built to do: predict plausible tokens. Hallucination is a feature of the architecture, not a bug. Harness engineering (Chapter 07) exists to catch it.
-- **"My prompt doesn't work"**: You're not giving the model enough constraints. Structured output (next chapter) solves this.
-- **"It's too slow"**: Check your token count. Are you sending the entire conversation history every time?
+## 4. `max_tokens`
 
-## What's Next
+Controls maximum output length. This is your primary defense against:
 
-Now that you understand the engine, learn how to control it:
+* runaway agent loops
+* unexpected cost spikes
+* excessive response latency
+* context window overflow from overly long generations
+
+Always set a `max_tokens` limit appropriate for your use case. Never rely on the model to "know when to stop."
+
+## 5. `tools` (optional but essential for agents)
+
+Defines functions the model can request execution of. Covered in depth in [Tool Design Patterns](../02-the-agent-loop/02-tool-design-patterns.md).
+
+---
+
+# Common Pitfalls
+
+## "The model is hallucinating"
+
+Hallucination emerges naturally from probabilistic token prediction under uncertainty.
+
+The model is optimized for:
+
+* plausibility
+* coherence
+* continuation quality
+
+—not truth.
+
+This is why:
+
+* retrieval systems
+* validation layers
+* structured outputs
+* harness engineering
+
+exist in production AI systems.
+
+## "My prompt doesn't work"
+
+Usually this means:
+
+* insufficient constraints
+* ambiguous instructions
+* unclear output format
+* missing examples
+
+LLMs are highly sensitive to context structure.
+
+Structured output and prompt engineering dramatically improve reliability.
+
+## "It's too slow"
+
+Check:
+
+* token count
+* context size
+* retrieved documents
+* conversation history
+* unnecessary tools
+
+Many slow agents are simply sending too much context.
+
+## "The model forgot earlier information"
+
+The model has no persistent memory by default.
+
+Every request only sees:
+
+* what fits in the current context window
+* what you explicitly resend
+
+Memory systems are external infrastructure layered around the model.
+
+---
+
+# The Core Insight
+
+LLMs are not databases.
+They are not reasoning engines in the classical sense.
+They are not truth machines.
+
+They are probabilistic token predictors operating over context.
+
+Once you deeply understand that, modern AI systems become much easier to reason about:
+
+* prompts
+* agents
+* tools
+* memory
+* RAG
+* structured output
+* evaluation
+* guardrails
+
+All of them are mechanisms for shaping the token prediction process.
+
+**This entire repository is about building reliable engineering around that fundamental probabilistic core.**
+
+---
+
+# What's Next
+
+Now that you understand the engine, the next step is learning how to control it effectively.
+
 → [Prompt Engineering](02-prompt-engineering.md)

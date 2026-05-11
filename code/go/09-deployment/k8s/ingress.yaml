@@ -1,0 +1,84 @@
+# ============================================================
+# k8s/ingress.yaml — NGINX Ingress Controller
+#
+# Key streaming-specific settings:
+#   • proxy-buffering: "off"   — chunks sent immediately to the client
+#   • proxy-read-timeout: 300  — keeps SSE connections alive for 5 minutes
+#   • proxy-send-timeout: 300  — same for uploads
+#
+# TLS is terminated here; the backend communicates over plain HTTP inside
+# the cluster (traffic is encrypted at the network layer by mTLS/service mesh).
+#
+# Production notes:
+#   • Replace "your-domain.com" with your actual domain.
+#   • Replace "agent-tls-secret" with your TLS certificate Secret.
+#   • Rate limiting applies per source IP; tune for your traffic patterns.
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-service-ingress
+  namespace: production
+  annotations:
+    # Use the NGINX ingress class
+    kubernetes.io/ingress.class: "nginx"
+
+    # ── Streaming-critical settings ─────────────────────────
+    # Disable response buffering so SSE chunks reach the client immediately
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # Allow long-lived SSE connections (5 minutes)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Increase body size for large agent payloads (document uploads, etc.)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+    # ── Rate limiting ────────────────────────────────────────
+    # 100 requests per minute per source IP (burst to 20 immediately)
+    nginx.ingress.kubernetes.io/limit-rpm: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "20"
+    # Return 429 (not 503) so clients can back off gracefully
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+
+    # ── Security ─────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # HSTS: tell browsers to use HTTPS for 1 year
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+
+    # ── CORS ─────────────────────────────────────────────────
+    # Handle CORS at the ingress level for non-streaming endpoints.
+    # The app also sets CORS headers; the ingress headers take precedence.
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://your-domain.com"
+
+spec:
+  tls:
+    - hosts:
+        - api.your-domain.com
+      secretName: agent-tls-secret    # Created by cert-manager or pre-provisioned
+
+  rules:
+    - host: api.your-domain.com
+      http:
+        paths:
+          - path: /agent
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-service
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: agent-service
+                port:
+                  number: 8000
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: agent-service
+                port:
+                  number: 8000

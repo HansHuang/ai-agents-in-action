@@ -1,0 +1,70 @@
+# ============================================================
+# k8s/hpa.yaml — Horizontal Pod Autoscaler
+#
+# Scales the Deployment between 3 and 20 replicas based on:
+#   • CPU utilisation (target 70%)
+#   • Memory utilisation (target 80%)
+#   • Custom metric: requests_per_second (target 100 RPS per pod)
+#
+# Production notes:
+#   • The custom metric requires the Prometheus Adapter to be installed.
+#   • Tune scaleDown stabilisation to avoid thrashing.
+#   • GPU-backed deployments may prefer memory-only autoscaling.
+# ============================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agent-service-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agent-service
+
+  minReplicas: 3
+  maxReplicas: 20
+
+  metrics:
+    # Scale up when any pod is above 70% CPU
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # Scale up when any pod is above 80% memory
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # Custom metric: scale when > 100 requests/second per pod.
+    # Requires Prometheus Adapter configured with this metric.
+    - type: Pods
+      pods:
+        metric:
+          name: requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+
+  behavior:
+    # Scale up quickly (agent traffic can spike suddenly)
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 4        # Add up to 4 pods at a time
+          periodSeconds: 60
+
+    # Scale down slowly (avoid evicting in-flight LLM calls)
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+        - type: Pods
+          value: 1        # Remove 1 pod at a time
+          periodSeconds: 120

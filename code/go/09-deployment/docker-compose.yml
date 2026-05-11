@@ -1,0 +1,91 @@
+# ============================================================
+# docker-compose.yml — Local development stack (Go)
+#
+# Services:
+#   agent    — Go HTTP agent service (code/go/09-deployment/)
+#   redis    — Session state & rate-limit counters
+#   qdrant   — Vector database
+# ============================================================
+
+services:
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ai-agent-service-go:local
+    container_name: agent-service-go
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4o-mini}
+      REQUEST_TIMEOUT_SECONDS: "120"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DAILY_BUDGET_USD: "100.0"
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      PORT: "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - agent-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis-go
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    networks:
+      - agent-net
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: agent-qdrant-go
+    restart: unless-stopped
+    ports:
+      - "6335:6333"
+      - "6336:6334"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - agent-net
+
+volumes:
+  redis-data:
+  qdrant-data:
+
+networks:
+  agent-net:
+    driver: bridge

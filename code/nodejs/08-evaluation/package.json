@@ -1,0 +1,21 @@
+{
+  "name": "08-evaluation",
+  "version": "1.0.0",
+  "description": "Agent evaluation framework — TypeScript",
+  "main": "dist/agent_evaluator.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/agent_evaluator.js",
+    "dev": "ts-node agent_evaluator.ts"
+  },
+  "dependencies": {
+    "openai": "^4.52.0",
+    "tsx": "^4.21.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}

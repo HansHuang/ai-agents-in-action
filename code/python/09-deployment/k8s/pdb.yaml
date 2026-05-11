@@ -1,0 +1,26 @@
+# ============================================================
+# k8s/pdb.yaml — Pod Disruption Budget
+#
+# Ensures at least 2 agent pods remain running during:
+#   • Node drains (kubectl drain)
+#   • Cluster upgrades
+#   • Voluntary disruptions (reschedules, spot-instance reclaims)
+#
+# With minAvailable: 2 and 3 replicas, k8s will only evict one pod
+# at a time, keeping the service available throughout maintenance.
+#
+# Production notes:
+#   • Increase minAvailable when you have more replicas.
+#   • A common pattern is: minAvailable = replicas - 1.
+# ============================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-service-pdb
+  namespace: production
+spec:
+  # Always keep at least 2 pods running
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: agent-service

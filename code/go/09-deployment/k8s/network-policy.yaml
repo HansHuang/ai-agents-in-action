@@ -1,0 +1,107 @@
+# ============================================================
+# k8s/network-policy.yaml — Network Policy
+#
+# Default-deny posture: all ingress and egress is blocked unless
+# explicitly allowed below.
+#
+# Allowed traffic:
+#   Ingress:  only from the NGINX ingress controller namespace
+#   Egress:   LLM APIs (OpenAI, Anthropic), Qdrant, Redis,
+#             kube-dns (required for service discovery)
+#
+# Production notes:
+#   • Replace IP blocks with your actual provider CIDR ranges or
+#     use egress gateway / Service Entry (Istio) instead.
+#   • If you add a new tool API, add a corresponding egress rule here.
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-service-netpol
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-service
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # ── Ingress rules ──────────────────────────────────────────
+  ingress:
+    # Allow traffic only from the NGINX ingress controller pods
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+
+    # Allow Prometheus to scrape /metrics from within the cluster
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+
+  # ── Egress rules ───────────────────────────────────────────
+  egress:
+    # kube-dns — required for all service name resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # OpenAI API (api.openai.com → 104.18.x.x range; use DNS egress in production)
+    - to:
+        - ipBlock:
+            cidr: 104.18.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Anthropic API (api.anthropic.com)
+    - to:
+        - ipBlock:
+            cidr: 160.79.104.0/23
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Allow HTTPS egress to any external LLM/tool API.
+    # This is broader than ideal; tighten with specific CIDRs or an egress proxy.
+    - ports:
+        - protocol: TCP
+          port: 443
+
+    # Qdrant vector database (within the cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: qdrant
+      ports:
+        - protocol: TCP
+          port: 6333   # HTTP API
+        - protocol: TCP
+          port: 6334   # gRPC API
+
+    # Redis session store (within the cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379

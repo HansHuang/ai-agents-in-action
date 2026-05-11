@@ -1,0 +1,128 @@
+# ============================================================
+# docker-compose.yml — Local development stack
+#
+# Services:
+#   agent    — FastAPI agent service (code/python/09-deployment/)
+#   redis    — Session state & rate-limit counters
+#   qdrant   — Vector database (optional; comment out if not needed locally)
+#
+# Usage:
+#   docker compose up            # start all services
+#   docker compose up agent      # start only the agent (uses external Redis/Qdrant)
+#   docker compose down -v       # stop and remove volumes
+# ============================================================
+
+services:
+
+  # ── Agent Service ──────────────────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime      # Use the lean production stage, not the builder
+    image: ai-agent-service:local
+    container_name: agent-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # LLM keys — set these in a .env file, never commit them
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      # Service configuration
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4o-mini}
+      REQUEST_TIMEOUT_SECONDS: "120"
+      STREAM_TIMEOUT_SECONDS: "300"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # Cost limits
+      DAILY_BUDGET_USD: "100.0"
+      USER_DAILY_BUDGET_USD: "5.0"
+
+      # Rate limits
+      GLOBAL_RATE_LIMIT_RPS: "100"
+      PER_USER_RATE_LIMIT_RPM: "30"
+
+      # Allow all origins in local dev; restrict in staging/production
+      ALLOWED_ORIGINS: '["*"]'
+
+      # Internal service URLs
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    # Mount source code for hot-reload during development.
+    # Remove this volume mount in the production Dockerfile/Compose.
+    volumes:
+      - .:/app:ro
+    networks:
+      - agent-net
+
+
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"          # Expose for local debugging only; remove in production
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""              # Disable persistence for session cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    networks:
+      - agent-net
+
+
+  # ── Qdrant (vector database) ───────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: agent-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"          # HTTP API
+      - "6334:6334"          # gRPC API
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - agent-net
+
+
+# ── Volumes ────────────────────────────────────────────────────
+volumes:
+  redis-data:
+  qdrant-data:
+
+
+# ── Networks ───────────────────────────────────────────────────
+networks:
+  agent-net:
+    driver: bridge

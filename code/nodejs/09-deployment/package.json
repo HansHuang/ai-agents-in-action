@@ -1,0 +1,20 @@
+{
+  "name": "ai-agents-deployment",
+  "version": "1.0.0",
+  "description": "12-Factor Agent deployment tooling — Node.js/TypeScript",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "validate": "tsx ci_twelve_factor_check.ts",
+    "dashboard": "tsx maturity_dashboard.ts"
+  },
+  "dependencies": {
+    "openai": "^4.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
