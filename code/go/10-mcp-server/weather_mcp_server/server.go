@@ -175,7 +175,7 @@ func handleGetForecast(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	return mcp.NewToolResultText(string(payload)), nil
 }
 
-func handleStatus(ctx context.Context, req mcp.ReadResourceRequest) (string, error) {
+func handleStatus(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 	status := map[string]any{
 		"status":           "healthy",
 		"server":           "weather-server",
@@ -187,9 +187,15 @@ func handleStatus(ctx context.Context, req mcp.ReadResourceRequest) (string, err
 	}
 	payload, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(payload), nil
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      req.Params.URI,
+			MIMEType: "application/json",
+			Text:     string(payload),
+		},
+	}, nil
 }
 
 // ---------------------------------------------------------------------------

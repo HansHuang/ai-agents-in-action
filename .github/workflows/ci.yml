@@ -17,9 +17,10 @@ jobs:
           - 03-agent-loop
           - 04-rag-pipeline
           - 05-context-assembly
-          - 06-multi-agent
-          - 07-langgraph-exploration
-          - 08-harness
+          - 06-frameworks
+          - 07-harness
+          - 08-evaluation
+          - 09-deployment
           - 09-skills
           - 10-mcp-server
           - 11-eval-suite
@@ -49,9 +50,10 @@ jobs:
           - 03-agent-loop
           - 04-rag-pipeline
           - 05-context-assembly
-          - 06-multi-agent
-          - 07-langgraph-exploration
-          - 08-harness
+          - 06-frameworks
+          - 07-harness
+          - 08-evaluation
+          - 09-deployment
           - 09-skills
           - 10-mcp-server
           - 11-eval-suite
@@ -60,8 +62,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: code/nodejs/${{ matrix.concept }}/package-lock.json
       - name: Install dependencies for ${{ matrix.concept }}
         working-directory: code/nodejs/${{ matrix.concept }}
         run: |
@@ -70,7 +70,12 @@ jobs:
           fi
       - name: Syntax check ${{ matrix.concept }}
         working-directory: code/nodejs/${{ matrix.concept }}
-        run: node --check index.js
+        run: |
+          if [ -f index.js ]; then
+            node --check index.js
+          elif [ -f tsconfig.json ]; then
+            npx tsc --noEmit
+          fi
 
   go:
     runs-on: ubuntu-latest
@@ -83,9 +88,10 @@ jobs:
           - 03-agent-loop
           - 04-rag-pipeline
           - 05-context-assembly
-          - 06-multi-agent
-          - 07-langgraph-exploration
-          - 08-harness
+          - 06-frameworks
+          - 07-harness
+          - 08-evaluation
+          - 09-deployment
           - 09-skills
           - 10-mcp-server
           - 11-eval-suite
