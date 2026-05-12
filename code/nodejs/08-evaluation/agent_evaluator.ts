@@ -53,7 +53,7 @@ const EndToEndTestCaseSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export type RetrievalTestCase = z.infer<typeof RetrievalTestCaseSchema>;
-export type GenerationTestCase = z.infer<typeof GenerationTestCaseSchema>;
+export type GenerationTestCase = z.input<typeof GenerationTestCaseSchema>;
 export type EndToEndTestCase = z.infer<typeof EndToEndTestCaseSchema>;
 
 export interface RetrievalMetrics {
@@ -414,7 +414,7 @@ Evaluate the response for completeness. Output JSON:
   }
 
   /** @internal */
-  async _callJudge(prompt: string): Promise<Record<string, unknown>> {
+  async _callJudge(prompt: string): Promise<Record<string, any>> {
     const completion = await this.openai.chat.completions.create({
       model: this.model,
       messages: [{ role: "user", content: prompt }],
@@ -868,7 +868,7 @@ async function main(): Promise<void> {
   const judge = new LLMJudge();
 
   // Override _callJudge for demo (no real API key required)
-  (judge as unknown as { _callJudge: () => Promise<Record<string, unknown>> })._callJudge =
+  (judge as unknown as { _callJudge: () => Promise<Record<string, any>> })._callJudge =
     async () => ({
       is_faithful: true,
       is_relevant: true,

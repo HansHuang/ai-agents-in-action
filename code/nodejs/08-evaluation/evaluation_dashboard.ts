@@ -55,19 +55,18 @@ export class EvaluationDashboard {
 
     if (report.retrieval) this.printRetrievalSection(report.retrieval);
     if (report.generation) this.printGenerationSection(report.generation);
-    if (report.endToEnd) this.printEndToEndSection(report.endToEnd);
+    if (report.end_to_end) this.printEndToEndSection(report.end_to_end);
 
     this.printOverallHealth(report);
   }
 
   printRetrievalSection(report: RetrievalReport): void {
     console.log("\n── Retrieval Metrics ──");
-    const m = report.aggregate;
     const rows = [
-      ["Hit Rate",     m.hitRate,     THRESHOLDS.RETRIEVAL_HIT_RATE_MIN],
-      ["Precision@K",  m.precisionAtK, THRESHOLDS.RETRIEVAL_PRECISION_MIN],
-      ["Recall@K",     m.recallAtK,   THRESHOLDS.RETRIEVAL_PRECISION_MIN],
-      ["MRR",          m.mrr,         THRESHOLDS.RETRIEVAL_PRECISION_MIN],
+      ["Hit Rate",     report.hit_rate,       THRESHOLDS.RETRIEVAL_HIT_RATE_MIN],
+      ["Precision@K",  report.precision_at_k, THRESHOLDS.RETRIEVAL_PRECISION_MIN],
+      ["Recall@K",     report.recall_at_k,    THRESHOLDS.RETRIEVAL_PRECISION_MIN],
+      ["MRR",          report.mrr,            THRESHOLDS.RETRIEVAL_PRECISION_MIN],
     ] as Array<[string, number, number]>;
 
     for (const [name, value, threshold] of rows) {
@@ -78,12 +77,11 @@ export class EvaluationDashboard {
 
   printGenerationSection(report: GenerationReport): void {
     console.log("\n── Generation Metrics ──");
-    const m = report.aggregate;
     const rows = [
-      ["Faithfulness",  m.avgFaithfulness,  THRESHOLDS.GENERATION_FAITHFULNESS_MIN],
-      ["Relevance",     m.avgRelevance,     THRESHOLDS.GENERATION_RELEVANCE_MIN],
-      ["Completeness",  m.avgCompleteness,  THRESHOLDS.GENERATION_RELEVANCE_MIN],
-      ["Rule Pass Rate",m.rulePassRate,     THRESHOLDS.GENERATION_FAITHFULNESS_MIN],
+      ["Faithfulness",  report.faithfulness_pass_rate ?? 0,  THRESHOLDS.GENERATION_FAITHFULNESS_MIN],
+      ["Relevance",     report.relevance_pass_rate ?? 0,     THRESHOLDS.GENERATION_RELEVANCE_MIN],
+      ["Completeness",  report.completeness_pass_rate ?? 0,  THRESHOLDS.GENERATION_RELEVANCE_MIN],
+      ["Rule Pass Rate",report.overall_pass_rate,            THRESHOLDS.GENERATION_FAITHFULNESS_MIN],
     ] as Array<[string, number, number]>;
 
     for (const [name, value, threshold] of rows) {
@@ -94,10 +92,9 @@ export class EvaluationDashboard {
 
   printEndToEndSection(report: EndToEndReport): void {
     console.log("\n── End-to-End Metrics ──");
-    const m = report.aggregate;
-    const st = status(m.successRate, THRESHOLDS.E2E_SUCCESS_MIN);
-    console.log(`  ${"Success Rate".padEnd(14)} ${bar(m.successRate)} ${pct(m.successRate).padStart(7)}  [${st}]`);
-    console.log(`  ${"Avg Turns".padEnd(14)} ${m.avgTurns.toFixed(1)}`);
+    const st = status(report.task_success_rate, THRESHOLDS.E2E_SUCCESS_MIN);
+    console.log(`  ${"Success Rate".padEnd(14)} ${bar(report.task_success_rate)} ${pct(report.task_success_rate).padStart(7)}  [${st}]`);
+    console.log(`  ${"Avg Turns".padEnd(14)} ${report.avg_turns_to_resolution.toFixed(1)}`); 
   }
 
   printOverallHealth(report: FullEvaluationReport): void {
@@ -105,13 +102,13 @@ export class EvaluationDashboard {
 
     const checks: boolean[] = [];
     if (report.retrieval) {
-      checks.push(report.retrieval.aggregate.hitRate >= THRESHOLDS.RETRIEVAL_HIT_RATE_MIN);
+      checks.push(report.retrieval.hit_rate >= THRESHOLDS.RETRIEVAL_HIT_RATE_MIN);
     }
     if (report.generation) {
-      checks.push(report.generation.aggregate.avgFaithfulness >= THRESHOLDS.GENERATION_FAITHFULNESS_MIN);
+      checks.push((report.generation.faithfulness_pass_rate ?? 0) >= THRESHOLDS.GENERATION_FAITHFULNESS_MIN);
     }
-    if (report.endToEnd) {
-      checks.push(report.endToEnd.aggregate.successRate >= THRESHOLDS.E2E_SUCCESS_MIN);
+    if (report.end_to_end) {
+      checks.push(report.end_to_end.task_success_rate >= THRESHOLDS.E2E_SUCCESS_MIN);
     }
 
     const passed = checks.filter(Boolean).length;
@@ -138,13 +135,13 @@ export class EvaluationDashboard {
     }
 
     if (current.retrieval && baseline.retrieval) {
-      check("Hit Rate", current.retrieval.aggregate.hitRate, baseline.retrieval.aggregate.hitRate);
+      check("Hit Rate", current.retrieval.hit_rate, baseline.retrieval.hit_rate);
     }
     if (current.generation && baseline.generation) {
-      check("Faithfulness", current.generation.aggregate.avgFaithfulness, baseline.generation.aggregate.avgFaithfulness);
+      check("Faithfulness", current.generation.faithfulness_pass_rate ?? 0, baseline.generation.faithfulness_pass_rate ?? 0);
     }
-    if (current.endToEnd && baseline.endToEnd) {
-      check("Success Rate", current.endToEnd.aggregate.successRate, baseline.endToEnd.aggregate.successRate);
+    if (current.end_to_end && baseline.end_to_end) {
+      check("Success Rate", current.end_to_end.task_success_rate, baseline.end_to_end.task_success_rate);
     }
 
     if (regressions.length) {

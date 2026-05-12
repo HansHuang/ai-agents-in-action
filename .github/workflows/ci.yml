@@ -71,9 +71,9 @@ jobs:
       - name: Syntax check ${{ matrix.concept }}
         working-directory: code/nodejs/${{ matrix.concept }}
         run: |
-          if [ -f index.js ]; then
+          if [ -s index.js ]; then
             node --check index.js
-          elif [ -f tsconfig.json ]; then
+          elif [ -f tsconfig.json ] && ls *.ts 1>/dev/null 2>&1; then
             npx tsc --noEmit
           fi
 
