@@ -8,7 +8,6 @@ See docs/01-foundations/02-prompt-engineering.md — "Chain-of-Thought"
 Why chain-of-thought helps:
   - The model must commit to intermediate values before reaching the answer.
   - Wrong steps become visible and debuggable — critical in an agent loop.
-  - For complex multi-step problems, CoT can lift accuracy by 20-40% at temp=0.
   - Trade-off: CoT costs more output tokens. Skip it for simple lookups.
 """
 
@@ -42,13 +41,13 @@ WITH_COT = [
 ]
 
 
-def call(messages: list[dict], client: OpenAI) -> str:
+def call(messages: list[dict], client: OpenAI) -> tuple[str, int]:
     response = client.chat.completions.create(
         model=MODEL,
         messages=messages,
         temperature=0,
     )
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content.strip(), response.usage.completion_tokens
 
 
 def main() -> None:
@@ -58,18 +57,21 @@ def main() -> None:
     print("=" * 60)
 
     print("\n[WITHOUT chain-of-thought]")
-    without = call(WITHOUT_COT, client)
+    without, without_tokens = call(WITHOUT_COT, client)
     print(without)
+    print(f"Output tokens: {without_tokens}")
 
     print("\n[WITH chain-of-thought]")
-    with_cot = call(WITH_COT, client)
+    with_cot, with_cot_tokens = call(WITH_COT, client)
     print(with_cot)
+    print(f"Output tokens: {with_cot_tokens}")
 
     print("\n" + "=" * 60)
     print("Observation: the CoT response shows every arithmetic step.")
     print("If the answer is wrong, you can see exactly which step failed.")
     print("In an agent loop this means a wrong tool call is debuggable,")
     print("not just a black-box failure.")
+    print("Use CoT when you need auditability; skip it for simple lookups.")
 
 
 if __name__ == "__main__":

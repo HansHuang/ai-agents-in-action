@@ -2,11 +2,16 @@
   "name": "02-structured-output",
   "version": "1.0.0",
   "type": "module",
-  "description": "Structured output: Zod schemas, function calling, parse-validate-retry",
+  "description": "Prompt engineering and structured output examples for chapters 02 and 03",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:template": "node index.js template",
+    "start:few-shot": "node index.js few-shot",
+    "start:chain-of-thought": "node index.js chain-of-thought",
     "start:zod": "npx tsx zod_extraction.ts",
+    "start:instructor": "npx tsx instructor_extraction.ts",
+    "start:compare": "npx tsx function_calling_vs_structured.ts",
     "test": "node --test prompt_template.test.js",
     "typecheck": "tsc --noEmit"
   },

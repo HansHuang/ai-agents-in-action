@@ -48,6 +48,8 @@ export function buildUserPrompt(articleText) {
 export function buildMessages(focusArea, articleText) {
   return [
     { role: "system", content: buildSystemPrompt(focusArea) },
+    // Keep raw article text in the user message so reusable instructions stay
+    // stable and user-provided content stays outside the system prompt.
     { role: "user", content: buildUserPrompt(articleText) },
   ];
 }
@@ -65,11 +67,13 @@ export function buildMessages(focusArea, articleText) {
 export function countTokens(messages, model = MODEL) {
   const enc = encodingForModel(model);
   const tokensPerMessage = 3;
+  const tokensPerName = 1;
   let total = 0;
   for (const message of messages) {
     total += tokensPerMessage;
-    for (const value of Object.values(message)) {
+    for (const [key, value] of Object.entries(message)) {
       total += enc.encode(value).length;
+      if (key === "name") total += tokensPerName;
     }
   }
   total += 3; // reply is primed with <|start|>assistant<|message|>
@@ -94,6 +98,8 @@ export async function main() {
   const response = await client.chat.completions.create({
     model: MODEL,
     messages,
+    // Low temperature keeps summarization mostly deterministic while still
+    // allowing minor wording variation in the bullets.
     temperature: 0.3,
   });
 

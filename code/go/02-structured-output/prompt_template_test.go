@@ -220,3 +220,27 @@ func TestCountTokensEmptyMessagesReturnsReplyPrimerOverhead(t *testing.T) {
 		t.Errorf("expected 3 (reply primer overhead), got %d", n)
 	}
 }
+
+func TestCountTokensNameFieldAddsOneTokenOfOverhead(t *testing.T) {
+	base := []message{{Role: "user", Content: "hello"}}
+	withName := []message{{Role: "user", Content: "hello", Name: "tester"}}
+	baseCount, err := countTokens(base, model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withNameCount, err := countTokens(withName, model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nameOnlyCount, err := countTokens([]message{{Role: "user", Content: "", Name: "tester"}}, model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyNameCount, err := countTokens([]message{{Role: "user", Content: ""}}, model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withNameCount != baseCount+(nameOnlyCount-emptyNameCount) {
+		t.Errorf("expected name field tokens to be counted consistently: base=%d withName=%d", baseCount, withNameCount)
+	}
+}

@@ -23,6 +23,7 @@ const userPromptTemplate = "Article:\n%s"
 type message struct {
 	Role    string
 	Content string
+	Name    string
 }
 
 // buildSystemPrompt returns the filled system prompt for the given focus area.
@@ -42,6 +43,8 @@ func buildUserPrompt(articleText string) (string, error) {
 }
 
 // buildMessages returns a messages slice ready for chat.completions.create.
+// Keep raw article text in the user message so reusable instructions stay
+// stable and user-provided content stays outside the system prompt.
 func buildMessages(focusArea, articleText string) ([]message, error) {
 	sys, err := buildSystemPrompt(focusArea)
 	if err != nil {
@@ -58,18 +61,23 @@ func buildMessages(focusArea, articleText string) ([]message, error) {
 }
 
 // countTokens returns the token cost of a messages slice (includes API overhead).
-// Accounts for the per-message overhead (3 tokens) and reply primer (3 tokens).
+// Accounts for the per-message overhead (3 tokens), optional name overhead
+// (1 token), and reply primer (3 tokens).
 func countTokens(messages []message, modelName string) (int, error) {
 	enc, err := tiktoken.EncodingForModel(modelName)
 	if err != nil {
 		return 0, err
 	}
 	const tokensPerMessage = 3
+	const tokensPerName = 1
 	total := 0
 	for _, msg := range messages {
 		total += tokensPerMessage
 		total += len(enc.Encode(msg.Role, nil, nil))
 		total += len(enc.Encode(msg.Content, nil, nil))
+		if msg.Name != "" {
+			total += len(enc.Encode(msg.Name, nil, nil)) + tokensPerName
+		}
 	}
 	total += 3 // reply is primed with <|start|>assistant<|message|>
 	return total, nil
@@ -107,8 +115,10 @@ func runPromptTemplate() {
 	}
 
 	resp, err := client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
-		Model:       model,
-		Messages:    chatMessages,
+		Model:    model,
+		Messages: chatMessages,
+		// Low temperature keeps summarization mostly deterministic while still
+		// allowing minor wording variation in the bullets.
 		Temperature: 0.3,
 	})
 	if err != nil {

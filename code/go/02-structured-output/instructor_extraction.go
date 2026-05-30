@@ -28,8 +28,8 @@ type InstructorSentiment struct {
 }
 
 // instructorSentimentSchema is the JSON Schema for InstructorSentiment.
-// All properties except key_phrases are required; additionalProperties is false
-// for OpenAI strict-mode compatibility.
+// sentiment and confidence are required; key_phrases is optional.
+// additionalProperties is false for OpenAI strict-mode compatibility.
 var instructorSentimentSchema = map[string]interface{}{
 	"type": "object",
 	"properties": map[string]interface{}{
@@ -55,7 +55,7 @@ var instructorSentimentSchema = map[string]interface{}{
 				"the sentiment classification. Omit if no clear phrases stand out.",
 		},
 	},
-	"required":             []string{"sentiment", "confidence", "key_phrases"},
+	"required":             []string{"sentiment", "confidence"},
 	"additionalProperties": false,
 }
 

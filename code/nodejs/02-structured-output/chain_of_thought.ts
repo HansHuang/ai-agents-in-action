@@ -30,13 +30,16 @@ const WITH_COT: OpenAI.Chat.ChatCompletionMessageParam[] = [
 async function call(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   client: OpenAI
-): Promise<string> {
+): Promise<{ text: string; completionTokens: number }> {
   const response = await client.chat.completions.create({
     model: MODEL,
     messages,
     temperature: 0,
   });
-  return response.choices[0].message.content?.trim() ?? "";
+  return {
+    text: response.choices[0].message.content?.trim() ?? "",
+    completionTokens: response.usage?.completion_tokens ?? 0,
+  };
 }
 
 async function main(): Promise<void> {
@@ -47,15 +50,18 @@ async function main(): Promise<void> {
 
   console.log("\n[WITHOUT chain-of-thought]");
   const without = await call(WITHOUT_COT, client);
-  console.log(without);
+  console.log(without.text);
+  console.log(`Output tokens: ${without.completionTokens}`);
 
   console.log("\n[WITH chain-of-thought]");
   const withCot = await call(WITH_COT, client);
-  console.log(withCot);
+  console.log(withCot.text);
+  console.log(`Output tokens: ${withCot.completionTokens}`);
 
   console.log("\n" + "=".repeat(60));
   console.log("Observation: the CoT response shows every arithmetic step.");
   console.log("If the answer is wrong, you can see exactly which step failed.");
+  console.log("Use CoT when you need auditability; skip it for simple lookups.");
 }
 
 main().catch(console.error);

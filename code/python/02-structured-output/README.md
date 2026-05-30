@@ -1,18 +1,19 @@
-# 02 — Structured Output (Python)
+# 02 — Prompt Engineering + Structured Output (Python)
 
-Demonstrates structured output extraction: function calling, JSON schema, Instructor + Pydantic, the parse-validate-retry pattern, and a side-by-side method comparison.
+This folder contains both the chapter-02 prompt-engineering demos and the chapter-03 structured-output demos.
 
 ## Files
 
 | File | Description |
 |---|---|
-| `prompt_template.py` | Prompt templates, token counting, and LLM call (from [02-prompt-engineering](../../../docs/01-foundations/02-prompt-engineering.md)) |
-| `few_shot_comparison.py` | Zero-shot vs few-shot side-by-side with token counts |
-| `chain_of_thought.py` | Same problem with and without CoT at `temperature=0` |
+| `main.py` | Chapter-02 entry point: `--mode template|few-shot|chain-of-thought` |
+| `prompt_template.py` | Prompt templates, token counting, and LLM call |
+| `few_shot_comparison.py` | Zero-shot vs few-shot with estimated and actual prompt-token counts |
+| `chain_of_thought.py` | Same problem with and without CoT, including output-token cost |
 | `instructor_extraction.py` | Pydantic model + `instructor.from_openai()` with automatic retry |
 | `retry_handler.py` | Generic `extract_with_retry()` using `json_schema` response_format |
 | `function_calling_vs_structured.py` | Side-by-side: function calling vs structured output across 5 texts |
-| `test_prompt_template.py` | pytest: prompt templates (no API key required) |
+| `test_prompt_template.py` | pytest: prompt-template logic (no API key required) |
 | `test_extraction.py` | pytest: extraction + retry logic (no API key required) |
 | `requirements.txt` | Python dependencies |
 
@@ -28,13 +29,29 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-python instructor_extraction.py        # Pydantic + Instructor demo
-python function_calling_vs_structured.py  # compare both API paths
-python retry_handler.py                # reusable handler (import only)
-pytest test_extraction.py -v           # tests (no API key needed)
+python main.py --mode template           # prompt templates
+python main.py --mode few-shot           # zero-shot vs few-shot
+python main.py --mode chain-of-thought   # reasoning with and without CoT
+python instructor_extraction.py          # chapter 03: Instructor-style extraction
+python function_calling_vs_structured.py # chapter 03: compare both API paths
+pytest test_prompt_template.py -v        # chapter 02 tests (no API key needed)
+pytest test_extraction.py -v             # chapter 03 tests (no API key needed)
 ```
 
-## Expected Output — `instructor_extraction.py`
+## Prompt Engineering Output — `python main.py --mode few-shot`
+
+```
+Input: "The new update is fine, I guess. Not bad, but nothing to get excited about."
+
+Approach     Result        Format    Est. prompt   API prompt
+----------------------------------------------------------------
+Zero-shot    Neutral       ok                 ...          ...
+Few-shot     Neutral       ok                 ...          ...
+
+Few-shot overhead: +... estimated prompt tokens per request
+```
+
+## Structured Output Output — `instructor_extraction.py`
 
 ```
 Text       : 'I absolutely love this, it changed my life!'
@@ -53,8 +70,7 @@ Confidence : 0.95
 Key Phrases: ['terrible', 'broke after one day']
 ```
 
-All three implementations (Python, [Node.js](../../nodejs/02-structured-output/), [Go](../../go/02-structured-output/)) produce the same output for the same input.
-
 ## Related Docs
 
+→ [Prompt Engineering](../../../docs/01-foundations/02-prompt-engineering.md)
 → [Structured Output](../../../docs/01-foundations/03-structured-output.md)

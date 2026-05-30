@@ -40,17 +40,18 @@ var cotWithMessages = []openai.ChatCompletionMessage{
 	},
 }
 
-// cotCall sends a chat completion request and returns the trimmed response text.
-func cotCall(ctx context.Context, messages []openai.ChatCompletionMessage, client *openai.Client) (string, error) {
+// cotCall sends a chat completion request and returns the trimmed response text
+// plus the completion token count reported by the API.
+func cotCall(ctx context.Context, messages []openai.ChatCompletionMessage, client *openai.Client) (string, int, error) {
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:       cotModel,
 		Messages:    messages,
 		Temperature: 0,
 	})
 	if err != nil {
-		return "", fmt.Errorf("chat completion: %w", err)
+		return "", 0, fmt.Errorf("chat completion: %w", err)
 	}
-	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+	return strings.TrimSpace(resp.Choices[0].Message.Content), resp.Usage.CompletionTokens, nil
 }
 
 // RunChainOfThought demonstrates chain-of-thought prompting versus direct answering.
@@ -58,7 +59,6 @@ func cotCall(ctx context.Context, messages []openai.ChatCompletionMessage, clien
 // Why chain-of-thought helps:
 //   - The model must commit to intermediate values before reaching the answer.
 //   - Wrong steps become visible and debuggable — critical in an agent loop.
-//   - For complex multi-step problems, CoT can lift accuracy by 20-40% at temp=0.
 //   - Trade-off: CoT costs more output tokens. Skip it for simple lookups.
 func RunChainOfThought() {
 	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
@@ -68,22 +68,25 @@ func RunChainOfThought() {
 	fmt.Println(strings.Repeat("=", 60))
 
 	fmt.Println("\n[WITHOUT chain-of-thought]")
-	without, err := cotCall(ctx, cotWithoutMessages, client)
+	without, withoutTokens, err := cotCall(ctx, cotWithoutMessages, client)
 	if err != nil {
 		log.Fatalf("without COT: %v", err)
 	}
 	fmt.Println(without)
+	fmt.Printf("Output tokens: %d\n", withoutTokens)
 
 	fmt.Println("\n[WITH chain-of-thought]")
-	withCOT, err := cotCall(ctx, cotWithMessages, client)
+	withCOT, withCOTTokens, err := cotCall(ctx, cotWithMessages, client)
 	if err != nil {
 		log.Fatalf("with COT: %v", err)
 	}
 	fmt.Println(withCOT)
+	fmt.Printf("Output tokens: %d\n", withCOTTokens)
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("Observation: the CoT response shows every arithmetic step.")
 	fmt.Println("If the answer is wrong, you can see exactly which step failed.")
 	fmt.Println("In an agent loop this means a wrong tool call is debuggable,")
 	fmt.Println("not just a black-box failure.")
+	fmt.Println("Use CoT when you need auditability; skip it for simple lookups.")
 }

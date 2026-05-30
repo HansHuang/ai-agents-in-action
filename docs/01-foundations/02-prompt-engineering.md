@@ -8,7 +8,7 @@
 - When prompt engineering ends and structured output begins
 
 ## Prerequisites
-- [How LLMs Actually Work](01-how-llms-work.md) — tokens, temperature, the API call lifecycle
+- [How LLMs Actually Work](01-how-llms-work.md) — tokens and the basic API message structure
 
 ---
 
@@ -32,21 +32,23 @@ messages = [
 
 ### Why Three Roles Exist
 
-The model was trained on conversations structured exactly this way. The `system` role was specifically fine-tuned to carry more weight — models are trained to obey the system prompt more than the user prompt. This is your superpower. Use it.
+The model was trained on conversations structured exactly this way. In practice, the `system` role usually carries more weight than the user prompt, so it is the best place to define behavior, format, and boundaries. That does **not** make it magic: conflicting instructions, overloaded prompts, and weak examples can still cause failures.
 
-> **Why this matters for agents:** In an agent loop, you append every tool call and tool result as messages. The `assistant` role carries the model's own reasoning forward. The `user` role can come from either a human or from tool output injected back into the conversation.
+> **Why this matters for agents:** We'll build agent loops in the next section. For now, know that an agent keeps appending tool calls and tool results as messages. The `assistant` role carries the model's prior reasoning forward, and the `user` role can come from either a human or from tool output injected back into the conversation.
 
 ---
 
 ## The System Prompt: Your Highest-Leverage Line of Code
 
-The system prompt is the instruction set that runs before every single message. It consumes tokens on every API call, so every word must earn its place.
+The system prompt is the instruction set that runs before every single message. It has outsized influence on behavior, but it also consumes tokens on every API call, so every word must earn its place.
 
-### A Bad System Prompt
+### A Minimal System Prompt
 ```
 You are a helpful assistant.
 ```
-**Problem:** Vague. The model decides what "helpful" means. No constraints. No format. No personality.
+**When it works:** Quick prototyping, generic chat, or simple one-off tasks.
+
+**Where it fails:** The model decides what "helpful" means. There are no domain boundaries, no format constraints, and no fallback behavior.
 
 ### A Good System Prompt
 ```
@@ -57,6 +59,8 @@ Never make up order details. If you don't know, say so.
 Respond in plain text, under 100 words.
 ```
 **Why it works:** Role clarity. Domain boundaries. Explicit fallback behavior. Output constraint.
+
+The point is not to make every system prompt long. The point is to make it specific enough for the failure modes you actually care about.
 
 ### The System Prompt Checklist
 
@@ -75,11 +79,14 @@ Every system prompt you write should answer:
 
 Models understand instructions. They understand examples better.
 
-### Zero-Shot (No Example)
+### Zero-Shot (Instruction Only)
 ```
-User: Classify this tweet as positive, negative, or neutral: "The new update is fine, I guess."
+System: Classify tweets as positive, negative, or neutral.
+Respond with exactly one word.
+
+User: "The new update is fine, I guess."
 ```
-The model might output: `"neutral"` — or it might output: `"This tweet expresses mild satisfaction mixed with indifference, which I would classify as neutral."` You don't know.
+This often works, but it is still brittle. The model might output `"Neutral"`, `"neutral"`, or `"This seems neutral."` The instruction teaches the format; it does not guarantee the model will follow it every time.
 
 ### Few-Shot (With Examples)
 ```
@@ -91,24 +98,37 @@ User: "This is the worst."          → Negative
 User: "It's okay, nothing special." → Neutral
 User: "The new update is fine, I guess."
 ```
-Now the model knows: respond with one word. The examples are part of the prompt, so they consume tokens, but the reliability gain is almost always worth it.
+Now the model has both the instruction **and** examples of the desired behavior. The examples reinforce format, casing, and edge-case handling. They also consume tokens, so the question is not "Is few-shot good?" but "Is the extra reliability worth the extra cost for this task?"
+
+Example output from the code sample:
+
+```text
+Approach     Result        Tokens sent
+--------------------------------------
+Zero-shot    Neutral                37
+Few-shot     Neutral                67
+
+Few-shot overhead: +30 tokens per request
+```
+
+The exact numbers vary by model and prompt wording, but the pattern is stable: examples usually buy consistency by spending more prompt tokens.
 
 ### When to Use Few-Shot
 | Scenario | Use Few-Shot? |
 |:---|:---|
-| Simple classification | 2-3 examples, then switch to structured output (next chapter) |
+| Simple classification | 2-3 examples if format drift matters, then switch to structured output when the label must be machine-parseable |
 | Format teaching | 1-2 examples showing exact output format |
 | Edge case handling | Show the tricky case in your examples |
-| Every request is unique | Not worth the tokens |
+| Every request is unique | Sometimes still useful if the output shape must stay consistent |
 
-> **Code** → [`few_shot_comparison.py`](../../code/python/02-structured-output/few_shot_comparison.py) · [Node.js](../../code/nodejs/02-structured-output/) · [Go](../../code/go/02-structured-output/)  
+> **Code** → [`few_shot_comparison.py`](../../code/python/02-structured-output/few_shot_comparison.py) · [`few_shot_comparison.ts`](../../code/nodejs/02-structured-output/few_shot_comparison.ts) · [`few_shot_comparison.go`](../../code/go/02-structured-output/few_shot_comparison.go)  
 > `few_shot_comparison.py` runs zero-shot and few-shot on the same input and prints both labels with their token counts side by side — so you can measure the reliability/cost trade-off directly.
 
 ---
 
 ## Chain-of-Thought: Making the Model Show Its Work
 
-The single most effective prompting technique: ask the model to reason step by step before giving the final answer.
+For reasoning-heavy tasks, one effective prompt pattern is to ask the model to reason step by step before giving the final answer.
 
 ### Without Chain-of-Thought
 ```
@@ -132,6 +152,8 @@ Final answer: $60
 
 The answer is the same, but now you can verify every step. For agents, this is critical — if the model's reasoning produces a wrong tool call, you need to see exactly where it went wrong.
 
+The trade-off is cost. Chain-of-thought usually produces many more output tokens than a direct answer, so use it when you need auditability or multi-step reasoning, not for simple lookups.
+
 ### When Chain-of-Thought Helps Most
 
 - Math and logic problems
@@ -139,9 +161,17 @@ The answer is the same, but now you can verify every step. For agents, this is c
 - Planning (which tool to call next)
 - Any decision where you need to audit the model's reasoning
 
+### When Not to Use Chain-of-Thought
+
+- Simple factual lookups
+- Classification tasks where a short label is enough
+- High-volume paths where extra output tokens would dominate cost
+- Any workflow where structured output already captures the decision you need
+
 > **Why this matters for agents:** In a ReAct agent, the model's "thinking" is the plan. Chain-of-thought makes the plan visible and debuggable. Without it, you're staring at a wrong tool call with no idea why.
 
-> **Code** → [`chain_of_thought.py`](../../code/python/02-structured-output/chain_of_thought.py) — sends the same math problem with and without CoT at `temperature=0`, printing both responses side by side.
+> **Code** → [`chain_of_thought.py`](../../code/python/02-structured-output/chain_of_thought.py) · [`chain_of_thought.ts`](../../code/nodejs/02-structured-output/chain_of_thought.ts) · [`chain_of_thought.go`](../../code/go/02-structured-output/chain_of_thought.go)  
+> Each sends the same math problem with and without CoT at `temperature=0`, printing both responses side by side.
 
 ---
 
@@ -157,7 +187,7 @@ Structured output demands: *"Your response must match this schema."*
 | "Please respond in JSON" | `response_format={ "type": "json_schema", "schema": {...} }` |
 | Model might add extra text | Model cannot output anything outside the schema |
 | You parse the output with regex | You parse the output with a JSON parser |
-| 95% reliable | 99.9% reliable |
+| Reliability depends on prompt wording and model behavior | Reliability is much higher because the response must satisfy the schema |
 
 For agents, structured output is non-negotiable. An agent calling a tool needs a guaranteed parseable function call, not a "please." The next chapter covers this in detail.
 
@@ -188,7 +218,12 @@ prompt = PROMPT_TEMPLATE.format(
 
 This pattern is the foundation of context engineering (Chapter 04). When you retrieve documents via RAG, you inject them into a template. When you assemble a multi-turn conversation, you're filling a template with history.
 
-> **Security note — prompt injection:** Never interpolate raw user input directly into a system prompt template. A malicious user can enter `Ignore all previous instructions` or embed `{article_text}` as literal text to manipulate the model's behavior. Validate and sanitize all inputs before templating. This is covered in depth in [Input Guardrails](../07-harness-engineering/02-input-guardrails-and-validation.md).
+Two practical rules matter here:
+
+- Keep reusable instructions in the template, but keep large retrieved text and user-provided content in the user message when possible.
+- Remember that template text is a recurring tax. A 400-token system prompt costs 400 tokens on every request before the model answers anything.
+
+> **Security note — prompt injection:** Never interpolate raw user input directly into a system prompt template. A malicious user can enter `Ignore all previous instructions` or include prompt-like content inside `{article_text}` to manipulate the model's behavior. Prefer placing raw user data in the user message, and validate or sanitize inputs before templating. This is covered in depth in [Input Guardrails](../07-harness-engineering/02-input-guardrails-and-validation.md).
 
 > **Code** → [`prompt_template.py`](../../code/python/02-structured-output/prompt_template.py) · [`prompt_template.js`](../../code/nodejs/02-structured-output/prompt_template.js) · [`prompt_template.go`](../../code/go/02-structured-output/prompt_template.go)  
 > Each shows a `PROMPT_TEMPLATE` constant with placeholder substitution, token counting before sending, and the full API call. Tests are in `test_prompt_template.py` / `prompt_template.test.js` / `prompt_template_test.go`.
@@ -197,10 +232,12 @@ This pattern is the foundation of context engineering (Chapter 04). When you ret
 
 ## Common Pitfalls
 
-- **"The model ignores my instructions"**: Your system prompt is too long or your instructions are buried. Critical instructions go first — models pay most attention to the beginning and end of prompts.
-- **"It worked yesterday, not today"**: You're relying on prompt engineering for something that should be structured output. Prompts are probabilistic; schemas are deterministic.
-- **"My few-shot examples made it worse"**: You showed the model what *not* to do. Few-shot examples should only show correct behavior. Never include examples of failures.
-- **"The system prompt is 5,000 tokens"**: You've written documentation, not a prompt. Every token in the system prompt is a tax on every single request. Be ruthless.
+- **"The model ignores my instructions"**: Usually this means the instruction is weak, conflicts with another instruction, or is buried too far from the task. Diagnostic: move the most important rule into the system prompt and restate the output format directly above the task.
+- **"It worked yesterday, not today"**: You're relying on prompt wording for something that should be schema-validated. Diagnostic: ask whether your harness needs a reliable structure or just decent prose. If it needs structure, use structured output.
+- **"My few-shot examples made it worse"**: The examples may be inconsistent, noisy, or teaching the wrong pattern. Diagnostic: check whether every example shows the exact behavior you want, including casing and format.
+- **"The system prompt is 5,000 tokens"**: You've written documentation, not a prompt. Diagnostic: count tokens before sending and cut any instruction that does not change model behavior.
+
+Prompt iteration is an engineering workflow, not an act of faith: write a baseline prompt, test it against a small set of representative inputs, inspect failures, and only then decide whether you need better wording, better examples, or a schema.
 
 ## What's Next
 

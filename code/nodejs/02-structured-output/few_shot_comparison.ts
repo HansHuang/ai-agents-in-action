@@ -10,6 +10,7 @@ import OpenAI from "openai";
 import { encoding_for_model } from "js-tiktoken";
 
 const MODEL = "gpt-4o";
+const ALLOWED_LABELS = new Set(["Positive", "Negative", "Neutral"]);
 
 const ZERO_SHOT_SYSTEM =
   "Classify the sentiment of the following text as exactly one of: " +
@@ -44,36 +45,51 @@ async function classify(
   systemPrompt: string,
   text: string,
   client: OpenAI
-): Promise<{ label: string; tokens: number }> {
+): Promise<{ label: string; estimatedPromptTokens: number; actualPromptTokens: number }> {
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: `Text: "${text}"` },
   ];
-  const tokens = countTokens(messages);
+  const estimatedPromptTokens = countTokens(messages);
   const response = await client.chat.completions.create({
     model: MODEL,
     messages,
     temperature: 0,
     max_tokens: 10,
   });
-  return { label: response.choices[0].message.content?.trim() ?? "", tokens };
+  return {
+    label: response.choices[0].message.content?.trim() ?? "",
+    estimatedPromptTokens,
+    actualPromptTokens: response.usage?.prompt_tokens ?? 0,
+  };
+}
+
+function formatStatus(label: string): string {
+  return ALLOWED_LABELS.has(label) ? "ok" : "drift";
 }
 
 async function main(): Promise<void> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   console.log(`Input: "${TEST_INPUT}"\n`);
-  console.log(`${"Approach".padEnd(12)} ${"Result".padEnd(12)} ${"Tokens sent".padStart(12)}`);
-  console.log("-".repeat(40));
+  console.log(
+    `${"Approach".padEnd(12)} ${"Result".padEnd(12)} ${"Format".padEnd(8)} ${"Est. prompt".padStart(12)} ${"API prompt".padStart(12)}`
+  );
+  console.log("-".repeat(64));
 
-  const { label: zeroLabel, tokens: zeroTokens } = await classify(ZERO_SHOT_SYSTEM, TEST_INPUT, client);
-  console.log(`${"Zero-shot".padEnd(12)} ${zeroLabel.padEnd(12)} ${String(zeroTokens).padStart(12)}`);
+  const zero = await classify(ZERO_SHOT_SYSTEM, TEST_INPUT, client);
+  console.log(
+    `${"Zero-shot".padEnd(12)} ${zero.label.padEnd(12)} ${formatStatus(zero.label).padEnd(8)} ${String(zero.estimatedPromptTokens).padStart(12)} ${String(zero.actualPromptTokens).padStart(12)}`
+  );
 
-  const { label: fewLabel, tokens: fewTokens } = await classify(FEW_SHOT_SYSTEM, TEST_INPUT, client);
-  console.log(`${"Few-shot".padEnd(12)} ${fewLabel.padEnd(12)} ${String(fewTokens).padStart(12)}`);
+  const few = await classify(FEW_SHOT_SYSTEM, TEST_INPUT, client);
+  console.log(
+    `${"Few-shot".padEnd(12)} ${few.label.padEnd(12)} ${formatStatus(few.label).padEnd(8)} ${String(few.estimatedPromptTokens).padStart(12)} ${String(few.actualPromptTokens).padStart(12)}`
+  );
 
-  const overhead = fewTokens - zeroTokens;
-  console.log(`\nFew-shot overhead: +${overhead} tokens per request`);
+  const overhead = few.estimatedPromptTokens - zero.estimatedPromptTokens;
+  console.log(`\nFew-shot overhead: +${overhead} estimated prompt tokens per request`);
+  console.log("A drift status means the model ignored the exact one-word label format.");
 }
 
 main().catch(console.error);

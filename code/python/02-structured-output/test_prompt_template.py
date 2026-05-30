@@ -129,3 +129,8 @@ class TestCountTokens:
         result = count_tokens([])
         assert isinstance(result, int)
         assert result == 3
+
+    def test_name_field_adds_one_token_of_overhead(self):
+        base = [{"role": "user", "content": "hello"}]
+        with_name = [{"role": "user", "content": "hello", "name": "tester"}]
+        assert count_tokens(with_name) == count_tokens(base) + len("tester") + 1

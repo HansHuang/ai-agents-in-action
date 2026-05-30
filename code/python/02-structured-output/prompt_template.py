@@ -40,7 +40,11 @@ def build_user_prompt(article_text: str) -> str:
 
 
 def build_messages(focus_area: str, article_text: str) -> list[dict]:
-    """Return a messages array ready to send to chat.completions.create."""
+    """Return a messages array ready to send to chat.completions.create.
+
+    Keep raw article text in the user message so reusable instructions stay
+    stable and user-provided content stays isolated from the system prompt.
+    """
     return [
         {"role": "system", "content": build_system_prompt(focus_area)},
         {"role": "user", "content": build_user_prompt(article_text)},
@@ -87,6 +91,8 @@ def main() -> None:
     response = client.chat.completions.create(
         model=MODEL,
         messages=messages,
+        # Low temperature keeps summarization mostly deterministic while still
+        # allowing minor wording variation in the bullets.
         temperature=0.3,
     )
     print("\nResponse:")

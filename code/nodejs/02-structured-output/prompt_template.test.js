@@ -133,4 +133,10 @@ describe("countTokens", () => {
     assert.equal(typeof result, "number");
     assert.equal(result, 3);
   });
+
+  it("counts the optional name field plus its fixed overhead", () => {
+    const base = [{ role: "user", content: "hello" }];
+    const withName = [{ role: "user", content: "hello", name: "tester" }];
+    assert.equal(countTokens(withName), countTokens(base) + countTokens([{ role: "user", content: "tester" }]) - countTokens([{ role: "user", content: "" }]) + 1);
+  });
 });

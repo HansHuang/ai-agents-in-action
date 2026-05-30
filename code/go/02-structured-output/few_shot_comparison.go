@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,12 @@ import (
 )
 
 const fewShotModel = "gpt-4o"
+
+var allowedFewShotLabels = map[string]struct{}{
+	"Positive": {},
+	"Negative": {},
+	"Neutral":  {},
+}
 
 const zeroShotSystem = "Classify the sentiment of the following text as exactly one of: " +
 	"Positive, Negative, or Neutral."
@@ -38,15 +45,10 @@ Text: "It arrived on time." → Neutral`
 const fewShotTestInput = "The new update is fine, I guess. Not bad, but nothing to get excited about."
 
 // countFewShotTokens estimates the prompt token count using tiktoken.
-// Falls back to a rough character-based estimate if the encoding is unavailable.
-func countFewShotTokens(messages []openai.ChatCompletionMessage) int {
+func countFewShotTokens(messages []openai.ChatCompletionMessage) (int, error) {
 	enc, err := tiktoken.EncodingForModel(fewShotModel)
 	if err != nil {
-		total := 0
-		for _, m := range messages {
-			total += 3 + len(m.Content)/4 + len(m.Role)/4
-		}
-		return total + 3
+		return 0, fmt.Errorf("load tokenizer: %w", err)
 	}
 	total := 0
 	for _, m := range messages {
@@ -54,17 +56,20 @@ func countFewShotTokens(messages []openai.ChatCompletionMessage) int {
 			len(enc.Encode(m.Role, nil, nil)) +
 			len(enc.Encode(m.Content, nil, nil))
 	}
-	return total + 3
+	return total + 3, nil
 }
 
-// fewShotClassify sends a zero-token classification request and returns
-// the label plus estimated prompt token count.
-func fewShotClassify(ctx context.Context, systemPrompt, text string, client *openai.Client) (string, int, error) {
+// fewShotClassify sends a classification request and returns the label plus
+// estimated and actual prompt token counts.
+func fewShotClassify(ctx context.Context, systemPrompt, text string, client *openai.Client) (string, int, int, error) {
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 		{Role: openai.ChatMessageRoleUser, Content: fmt.Sprintf("Text: %q", text)},
 	}
-	tokens := countFewShotTokens(messages)
+	estimatedTokens, err := countFewShotTokens(messages)
+	if err != nil {
+		return "", 0, 0, err
+	}
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:       fewShotModel,
 		Messages:    messages,
@@ -72,9 +77,16 @@ func fewShotClassify(ctx context.Context, systemPrompt, text string, client *ope
 		MaxTokens:   10,
 	})
 	if err != nil {
-		return "", tokens, fmt.Errorf("classify: %w", err)
+		return "", estimatedTokens, 0, fmt.Errorf("classify: %w", err)
 	}
-	return strings.TrimSpace(resp.Choices[0].Message.Content), tokens, nil
+	return strings.TrimSpace(resp.Choices[0].Message.Content), estimatedTokens, resp.Usage.PromptTokens, nil
+}
+
+func fewShotFormatStatus(label string) string {
+	if _, ok := allowedFewShotLabels[label]; ok {
+		return "ok"
+	}
+	return "drift"
 }
 
 // RunFewShotComparison demonstrates zero-shot vs few-shot sentiment classification.
@@ -86,25 +98,29 @@ func fewShotClassify(ctx context.Context, systemPrompt, text string, client *ope
 //
 // For anything more complex, switch to structured output (json_schema).
 func RunFewShotComparison() {
+	if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
+		log.Fatal(errors.New("OPENAI_API_KEY must be set"))
+	}
 	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 	ctx := context.Background()
 
 	fmt.Printf("Input: %q\n\n", fewShotTestInput)
-	fmt.Printf("%-12s %-12s %12s\n", "Approach", "Result", "Tokens sent")
-	fmt.Println(strings.Repeat("-", 40))
+	fmt.Printf("%-12s %-12s %-8s %12s %12s\n", "Approach", "Result", "Format", "Est. prompt", "API prompt")
+	fmt.Println(strings.Repeat("-", 64))
 
-	zeroResult, zeroTokens, err := fewShotClassify(ctx, zeroShotSystem, fewShotTestInput, client)
+	zeroResult, zeroEstimated, zeroActual, err := fewShotClassify(ctx, zeroShotSystem, fewShotTestInput, client)
 	if err != nil {
 		log.Fatalf("zero-shot: %v", err)
 	}
-	fmt.Printf("%-12s %-12s %12d\n", "Zero-shot", zeroResult, zeroTokens)
+	fmt.Printf("%-12s %-12s %-8s %12d %12d\n", "Zero-shot", zeroResult, fewShotFormatStatus(zeroResult), zeroEstimated, zeroActual)
 
-	fewResult, fewTokens, err := fewShotClassify(ctx, fewShotSystem, fewShotTestInput, client)
+	fewResult, fewEstimated, fewActual, err := fewShotClassify(ctx, fewShotSystem, fewShotTestInput, client)
 	if err != nil {
 		log.Fatalf("few-shot: %v", err)
 	}
-	fmt.Printf("%-12s %-12s %12d\n", "Few-shot", fewResult, fewTokens)
+	fmt.Printf("%-12s %-12s %-8s %12d %12d\n", "Few-shot", fewResult, fewShotFormatStatus(fewResult), fewEstimated, fewActual)
 
-	overhead := fewTokens - zeroTokens
-	fmt.Printf("\nFew-shot overhead: +%d tokens per request\n", overhead)
+	overhead := fewEstimated - zeroEstimated
+	fmt.Printf("\nFew-shot overhead: +%d estimated prompt tokens per request\n", overhead)
+	fmt.Println("A drift status means the model ignored the exact one-word label format.")
 }

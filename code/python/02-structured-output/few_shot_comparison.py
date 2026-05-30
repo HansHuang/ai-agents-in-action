@@ -21,6 +21,7 @@ import tiktoken
 from openai import OpenAI
 
 MODEL = "gpt-4o"
+ALLOWED_LABELS = {"Positive", "Negative", "Neutral"}
 
 ZERO_SHOT_SYSTEM = (
     "Classify the sentiment of the following text as exactly one of: "
@@ -52,37 +53,54 @@ def _count(messages: list[dict]) -> int:
     return total
 
 
-def classify(system_prompt: str, text: str, client: OpenAI) -> tuple[str, int]:
-    """Return (classification_label, token_count)."""
+def classify(system_prompt: str, text: str, client: OpenAI) -> tuple[str, int, int]:
+    """Return (classification_label, estimated_prompt_tokens, actual_prompt_tokens)."""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f'Text: "{text}"'},
     ]
-    tokens = _count(messages)
+    estimated_tokens = _count(messages)
     response = client.chat.completions.create(
         model=MODEL,
         messages=messages,
         temperature=0,
         max_tokens=10,
     )
-    return response.choices[0].message.content.strip(), tokens
+    actual_prompt_tokens = response.usage.prompt_tokens
+    return response.choices[0].message.content.strip(), estimated_tokens, actual_prompt_tokens
+
+
+def format_status(label: str) -> str:
+    """Return whether the model followed the requested one-word label format."""
+    return "ok" if label in ALLOWED_LABELS else "drift"
 
 
 def main() -> None:
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     print(f'Input: "{TEST_INPUT}"\n')
-    print(f"{'Approach':<12} {'Result':<12} {'Tokens sent':>12}")
-    print("-" * 40)
+    print(
+        f"{'Approach':<12} {'Result':<12} {'Format':<8} {'Est. prompt':>12} {'API prompt':>12}"
+    )
+    print("-" * 64)
 
-    zero_result, zero_tokens = classify(ZERO_SHOT_SYSTEM, TEST_INPUT, client)
-    print(f"{'Zero-shot':<12} {zero_result:<12} {zero_tokens:>12}")
+    zero_result, zero_estimated, zero_actual = classify(
+        ZERO_SHOT_SYSTEM, TEST_INPUT, client
+    )
+    print(
+        f"{'Zero-shot':<12} {zero_result:<12} {format_status(zero_result):<8} "
+        f"{zero_estimated:>12} {zero_actual:>12}"
+    )
 
-    few_result, few_tokens = classify(FEW_SHOT_SYSTEM, TEST_INPUT, client)
-    print(f"{'Few-shot':<12} {few_result:<12} {few_tokens:>12}")
+    few_result, few_estimated, few_actual = classify(FEW_SHOT_SYSTEM, TEST_INPUT, client)
+    print(
+        f"{'Few-shot':<12} {few_result:<12} {format_status(few_result):<8} "
+        f"{few_estimated:>12} {few_actual:>12}"
+    )
 
-    overhead = few_tokens - zero_tokens
-    print(f"\nFew-shot overhead: +{overhead} tokens per request")
+    overhead = few_estimated - zero_estimated
+    print(f"\nFew-shot overhead: +{overhead} estimated prompt tokens per request")
+    print("A drift status means the model ignored the exact one-word label format.")
 
 
 if __name__ == "__main__":
