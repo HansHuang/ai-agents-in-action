@@ -181,7 +181,7 @@ print(response.choices[0].message.content)
 # Output: Paris. It is also known as the City of Light.
 
 print(response.usage.total_tokens)
-# Output: 37
+# Output: 69
 ```
 
 ## Why Understanding This Matters will deal
