@@ -28,6 +28,185 @@ ChatGPT's eloquence, Claude's reasoning, Gemini's creativity, and AI agents them
 
 Every other capability — agents, tools, RAG, memory, workflows — is engineering layered on top of this fundamental process.
 
+
+
+---
+
+# What Happens When You Call the API
+
+Let's trace exactly what happens when your code executes this line:
+
+```python
+response = openai.chat.completions.create(
+    model="gpt-5.5",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What is the capital of France?"}
+    ],
+    temperature=0.7,
+    max_tokens=100
+)
+```
+
+## Step by Step
+
+### 1. Client-Side Preparation
+
+Your SDK serializes the request into JSON:
+
+```json
+{
+  "model": "gpt-5.5",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is the capital of France?"}
+  ],
+  "temperature": 0.7,
+  "max_tokens": 100
+}
+```
+
+This JSON is sent as an HTTPS POST request to OpenAI's API endpoint.
+
+### 2. Server-Side Tokenization
+
+The server receives your request and tokenizes all the text. The system prompt and user message are converted from human-readable text into sequences of integers (token IDs):
+
+```
+System prompt: "You are a helpful assistant."
+→ [2675, 527, 264, 12520, 11190, 13]
+
+User message: "What is the capital of France?"
+→ [3634, 374, 279, 5618, 315, 6051, 30]
+```
+
+These token IDs are what the model actually processes — not text.
+
+### 3. Context Assembly
+
+The tokenized messages are assembled into a single sequence. The model sees:
+
+```
+[system_prompt_tokens] [user_message_tokens]
+```
+
+At this point, the model has no memory of any previous conversation. It only sees what's in this sequence.
+
+### 4. Forward Pass Through the Neural Network
+
+The token sequence flows through the model's transformer architecture. Each token attends to every other token in the sequence through the attention mechanism. The model computes a probability distribution over its entire vocabulary for what the next token should be.
+
+For our example, after processing "What is the capital of France?", the model might assign:
+
+```
+" Paris"    → 94.2% probability
+" The"      →  2.1% probability
+" France"   →  1.3% probability
+" It"       →  0.8% probability
+... (over 100,000 possible tokens)
+```
+
+### 5. Sampling
+
+The `temperature` parameter (0.7 in our example) influences which token is actually selected. With temperature 0.7, the distribution is moderately sharpened — high-probability tokens become slightly more likely, low-probability tokens become slightly less likely, but there's still room for variation.
+
+The model samples from this distribution and selects `" Paris"` as the next token.
+
+### 6. Autoregressive Generation
+
+The selected token is appended to the sequence:
+
+```
+[...previous tokens..., " Paris"]
+```
+
+Now the model runs again, predicting the next token after "Paris":
+
+```
+"...Paris" → "." (89.3% probability)
+```
+
+This loop continues — predict, sample, append — until one of these happens:
+- The model generates a special end-of-sequence token
+- The `max_tokens` limit (100 in our example) is reached
+- A stop sequence is triggered
+
+For our query, the full generation might be:
+
+```
+" Paris" → "." → " It" → " is" → " also" → " known" → " as" → " the" → " City" → " of" → " Light" → "."
+```
+
+### 7. Detokenization
+
+The generated token IDs are converted back to text:
+
+```
+[7707, 13, 1107, 374, 1552, 1901, 374, 279, 3204, 315, 3077, 13]
+→ "Paris. It is also known as the City of Light."
+```
+
+### 8. Response Assembly
+
+The server packages everything into a response:
+
+```json
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "created": 1715472000,
+  "model": "gpt-5.5",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "Paris. It is also known as the City of Light."
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 12,
+    "total_tokens": 69
+  }
+}
+```
+
+### 9. Your Code Receives the Response
+
+Your SDK deserializes the JSON into a response object:
+
+```python
+print(response.choices[0].message.content)
+# Output: Paris. It is also known as the City of Light.
+
+print(response.usage.total_tokens)
+# Output: 37
+```
+
+## Why Understanding This Matters will deal
+
+
+Every concept in this repository builds on this flow:
+
+| Concept | Where It Fits in the Flow |
+|:---|:---|
+| **Prompt Engineering** | Steps 1 & 3 — what you put in `messages` and how it's assembled |
+| **Token Budgeting** | Steps 2 & 6 — how many tokens you send and generate |
+| **Context Engineering** | Step 3 — what's in the assembled sequence and how it got there |
+| **Structured Output** | Steps 5-6 — constraining what tokens can be generated |
+| **Streaming** | Steps 6-7 — receiving tokens incrementally as they're generated |
+| **Temperature Tuning** | Step 5 — controlling the probability distribution during sampling |
+| **Agent Loop** | Steps 1-9 — the entire flow repeats for each turn of the agent's orchestration loop |
+
+Later chapters add more to this flow:
+- **Tool Calling** — adding `tools` to Step 1 so the model can request function execution
+- **Retrieval (RAG)** — injecting external documents into Step 3
+- **Memory Management** — controlling what conversation history appears in Step 1
+
+This entire flow happens in milliseconds to seconds, and your agent well trigger it dozens or hundreds of times per conversation. Understanding each step is what separates someone who "uses AI" from someone who engineers with it.
+
+
 ---
 
 # Tokens: The Atoms of Language Models
@@ -39,7 +218,7 @@ A token is a chunk of text used internally by the model.
 In English:
 
 * `"Hello world"` → ~2 tokens
-* `"inexplicable"` → may be 1 token
+* `"inexplicable"` → may be 4 token
 * punctuation and spaces can also be tokens
 
 Rules vary by tokenizer and language:
@@ -305,43 +484,6 @@ The raw base model is usually an internal artifact rather than the product devel
 
 ---
 
-# The API Call Deconstructed
-
-When your code calls an LLM API, the process roughly looks like this:
-
-```text
-1. Client sends:
-   - model
-   - messages
-   - temperature
-   - tools (optional)
-   - generation settings
-
-2. Server tokenizes the input
-
-3. Model processes the full visible context
-
-4. Model predicts the next token probability distribution
-
-5. Sampling logic selects the next token
-
-6. Selected token is appended to the context
-
-7. Steps 4–6 repeat until:
-   - end-of-sequence token
-   - max_tokens reached
-   - stop sequence triggered
-
-8. Tokens are detokenized back into text
-
-9. Server returns:
-   - generated content
-   - token usage
-   - finish reason
-```
-
----
-
 # Streaming Responses
 
 Most modern APIs support token streaming.
@@ -368,11 +510,11 @@ Streaming is foundational to the Vercel AI SDK (Chapter 06) and is a key deploym
 
 Before optimizing exotic settings, master these five:
 
-## 1. `model`
+### 1. `model`
 
 Determines: capability, speed, context size, cost
-
-## 2. `messages`
+  
+### 2. `messages`
 
 The conversation itself:
 
@@ -385,14 +527,14 @@ The conversation itself:
 
 This is the primary interface to the model.
 
-## 3. `temperature`
+### 3. `temperature`
 
 Controls output randomness and variation.
 
 * Lower: more predictable
 * Higher: more diverse
 
-## 4. `max_tokens`
+### 4. `max_tokens`
 
 Controls maximum output length. This is your primary defense against:
 
@@ -403,7 +545,7 @@ Controls maximum output length. This is your primary defense against:
 
 Always set a `max_tokens` limit appropriate for your use case. Never rely on the model to "know when to stop."
 
-## 5. `tools` (optional but essential for agents)
+### 5. `tools` (optional but essential for agents)
 
 Defines functions the model can request execution of. Covered in depth in [Tool Design Patterns](../02-the-agent-loop/02-tool-design-patterns.md).
 

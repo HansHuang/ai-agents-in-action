@@ -206,4 +206,3 @@ This pattern is the foundation of context engineering (Chapter 04). When you ret
 
 Prompt engineering is powerful but fragile. The solution is structured output — guaranteed parseable responses that the harness can validate.
 → [Structured Output](03-structured-output.md)
-→ [Structured Output](03-structured-output.md)
